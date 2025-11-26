@@ -974,7 +974,7 @@ export default function PowerCurves() {
         >
           <ComposedChart
             data={powerData}
-            margin={{ bottom: 15, left: 0, right: 5 }}
+            margin={{ bottom: 15, left: 10, right: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
