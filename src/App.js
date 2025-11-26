@@ -104,6 +104,28 @@ export default function PowerCurves() {
   const [webROutput, setWebROutput] = useState("");
   const [webRInstance, setWebRInstance] = useState(null);
 
+  // Load WebR dynamically via script tag
+  const loadWebR = () => {
+    return new Promise((resolve, reject) => {
+      if (window.WebR) {
+        resolve(window.WebR);
+        return;
+      }
+      const script = document.createElement("script");
+      script.type = "module";
+      script.textContent = `
+        import { WebR } from 'https://webr.r-wasm.org/latest/webr.mjs';
+        window.WebR = WebR;
+        window.dispatchEvent(new Event('webr-loaded'));
+      `;
+      window.addEventListener("webr-loaded", () => resolve(window.WebR), {
+        once: true,
+      });
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  };
+
   // Load and run R code in browser using WebR
   const runRCode = async (rCode) => {
     if (webRStatus === "running") return;
@@ -115,10 +137,8 @@ export default function PowerCurves() {
         setWebRStatus("loading");
         setWebROutput("Downloading R runtime (~25MB, first time only)...");
 
-        // Dynamically import WebR
-        const { WebR } = await import(
-          "https://webr.r-wasm.org/latest/webr.mjs"
-        );
+        // Load WebR via script tag
+        const WebR = await loadWebR();
         webR = new WebR();
         await webR.init();
         setWebRInstance(webR);
