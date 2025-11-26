@@ -1,0 +1,700 @@
+import React, { useState, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer, Area, ComposedChart } from 'recharts';
+
+export default function PowerCurves() {
+  const [power, setPower] = useState(0.80);
+  const [alpha, setAlpha] = useState(0.025); // BH-adjusted
+  const [iccHamd, setIccHamd] = useState(0.04);
+  const [iccRetention, setIccRetention] = useState(0.05);
+  const [r2Hamd, setR2Hamd] = useState(0.40);
+  const [r2Retention, setR2Retention] = useState(0.08);
+  const [patientsPerCluster, setPatientsPerCluster] = useState(10);
+  const [controlAttrition, setControlAttrition] = useState(0.30);
+  
+  // Rasch/MFRM measurement model parameters
+  const [useRasch, setUseRasch] = useState(false);
+  const [useMFRM, setUseMFRM] = useState(false);
+  const [sumScoreReliability, setSumScoreReliability] = useState(0.86);
+  const [raschReliability, setRaschReliability] = useState(0.91);
+  const [raterVarianceProp, setRaterVarianceProp] = useState(0.07); // proportion of variance due to raters
+  
+  // Z-scores
+  const zAlpha = useMemo(() => {
+    // Two-tailed z for alpha
+    const z = {
+      0.05: 1.96,
+      0.025: 2.24,
+      0.01: 2.58
+    };
+    return z[alpha] || 2.24;
+  }, [alpha]);
+  
+  const zBeta = useMemo(() => {
+    const z = {
+      0.70: 0.524,
+      0.75: 0.674,
+      0.80: 0.842,
+      0.85: 1.036,
+      0.90: 1.282
+    };
+    return z[power] || 0.842;
+  }, [power]);
+
+  // Calculate measurement model variance adjustment
+  const measurementVarianceMultiplier = useMemo(() => {
+    // Baseline: sum score with its error variance
+    // Error variance = (1 - reliability) * total variance
+    
+    let multiplier = 1.0;
+    
+    if (useRasch) {
+      // Rasch reduces error variance
+      // Relative error: (1 - raschRel) / (1 - sumScoreRel)
+      const sumScoreError = 1 - sumScoreReliability;
+      const raschError = 1 - raschReliability;
+      const errorReduction = (sumScoreError - raschError) / sumScoreError;
+      
+      // This removes errorReduction proportion of the error variance
+      // Error is (1-rel) of total, so net reduction = errorReduction * (1-sumScoreRel)
+      multiplier *= (1 - errorReduction * sumScoreError);
+    }
+    
+    if (useMFRM) {
+      // MFRM removes rater variance entirely
+      multiplier *= (1 - raterVarianceProp);
+    }
+    
+    return multiplier;
+  }, [useRasch, useMFRM, sumScoreReliability, raschReliability, raterVarianceProp]);
+
+  // Calculate MDE for HAM-D given total N
+  const calcHamdMDE = (totalN) => {
+    const nClusters = Math.round(totalN / patientsPerCluster);
+    const nTreatmentClusters = Math.round(nClusters * 0.75);
+    const nControlClusters = nClusters - nTreatmentClusters;
+    
+    // Patients after 30% attrition
+    const nTreatmentPatients = nTreatmentClusters * patientsPerCluster * (1 - controlAttrition);
+    const nControlPatients = nControlClusters * patientsPerCluster * (1 - controlAttrition);
+    
+    // Harmonic mean of completers
+    const nHarmonic = (2 * nTreatmentPatients * nControlPatients) / (nTreatmentPatients + nControlPatients);
+    
+    // Variance calculations
+    const sigma2 = 49; // SD = 7
+    const sigma2Adj = sigma2 * (1 - r2Hamd);
+    
+    // Design effect for clustering
+    const clusterSize = patientsPerCluster * (1 - controlAttrition); // after attrition
+    const designEffect = 1 + (clusterSize - 1) * iccHamd;
+    
+    // IPCW variance inflation
+    const ipcwVIF = 1.20;
+    
+    // Repeated measures efficiency (4 timepoints, correlation ~0.5)
+    const repeatedMeasuresGain = 1.43;
+    
+    // Net variance (before measurement model adjustment)
+    const baseVariance = sigma2Adj * designEffect * ipcwVIF / repeatedMeasuresGain;
+    
+    // Apply measurement model variance reduction
+    const netVariance = baseVariance * measurementVarianceMultiplier;
+    
+    // Also calculate baseline (no Rasch/MFRM) for comparison
+    const baselineMDE = (zAlpha + zBeta) * Math.sqrt(2 * baseVariance / nHarmonic);
+    
+    // MDE with measurement model
+    const mde = (zAlpha + zBeta) * Math.sqrt(2 * netVariance / nHarmonic);
+    
+    return {
+      mde: mde,
+      baselineMDE: baselineMDE,
+      effectSize: mde / 7, // Cohen's d
+      nClusters: nClusters,
+      nCompleters: Math.round(nTreatmentPatients + nControlPatients),
+      varianceReduction: (1 - measurementVarianceMultiplier) * 100
+    };
+  };
+
+  // Calculate MDE for retention given total N
+  const [survivalEfficiency, setSurvivalEfficiency] = useState(4.0);
+  
+  const calcRetentionMDE = (totalN) => {
+    const nClusters = Math.round(totalN / patientsPerCluster);
+    const nTreatmentClusters = Math.round(nClusters * 0.75);
+    const nControlClusters = nClusters - nTreatmentClusters;
+    
+    const nTreatment = nTreatmentClusters * patientsPerCluster;
+    const nControl = nControlClusters * patientsPerCluster;
+    
+    // Design effect for clustering
+    const designEffect = 1 + (patientsPerCluster - 1) * iccRetention;
+    
+    const p0 = controlAttrition;
+    
+    // Step 1: Base SE for proportion difference
+    const baseSE = Math.sqrt(p0 * (1 - p0) * (1/nTreatment + 1/nControl));
+    
+    // Step 2: Clustering inflates variance
+    const clusteredSE = baseSE * Math.sqrt(designEffect);
+    
+    // Step 3: Covariate adjustment reduces variance
+    const adjustedSE = clusteredSE * Math.sqrt(1 - r2Retention);
+    
+    // Step 4: Survival analysis efficiency gain (vs binary endpoint)
+    // Range: 2x (conservative) to 5x (optimistic with continuous monitoring)
+    const survivalSE = adjustedSE / Math.sqrt(survivalEfficiency);
+    
+    const mde = (zAlpha + zBeta) * survivalSE;
+    
+    return {
+      mde: mde * 100, // percentage points
+      controlRate: p0 * 100,
+      treatmentRate: (p0 - mde) * 100,
+      nClusters: nClusters,
+      binaryMDE: (zAlpha + zBeta) * adjustedSE * 100 // for comparison
+    };
+  };
+
+  // Generate data for curves
+  const powerData = useMemo(() => {
+    const data = [];
+    for (let n = 400; n <= 1300; n += 50) {
+      const hamd = calcHamdMDE(n);
+      const retention = calcRetentionMDE(n);
+      data.push({
+        n: n,
+        clusters: hamd.nClusters,
+        hamdMDE: hamd.mde,
+        hamdBaselineMDE: hamd.baselineMDE,
+        hamdD: hamd.effectSize,
+        retentionMDE: retention.mde,
+        retentionTreatment: retention.treatmentRate
+      });
+    }
+    return data;
+  }, [power, alpha, iccHamd, iccRetention, r2Hamd, r2Retention, patientsPerCluster, controlAttrition, survivalEfficiency, measurementVarianceMultiplier, zAlpha, zBeta]);
+
+  // Current design values
+  const currentN = 1000;
+  const currentHamd = calcHamdMDE(currentN);
+  const currentRetention = calcRetentionMDE(currentN);
+
+  // Find sample size for specific MDEs
+  const findNForMDE = (targetMDE, calcFunc, field) => {
+    for (let n = 400; n <= 1300; n += 10) {
+      const result = calcFunc(n);
+      if (result[field] <= targetMDE) return n;
+    }
+    return ">1300";
+  };
+
+  const nFor2HAMDpoints = findNForMDE(2.0, calcHamdMDE, 'mde');
+  const nFor3HAMDpoints = findNForMDE(3.0, calcHamdMDE, 'mde');
+  const nFor7ppRetention = findNForMDE(7.0, calcRetentionMDE, 'mde');
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
+      <h1 className="text-2xl font-bold mb-2">AURORA Trial Power Curves</h1>
+      <p className="text-gray-600 mb-6">Explore minimum detectable effects across sample sizes</p>
+      
+      {/* Current Design Summary */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <h2 className="font-semibold mb-3">Current Design (N=1,000)</h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <div className="bg-blue-50 p-3 rounded">
+            <div className="text-gray-500">HAM-D MDE</div>
+            <div className="text-xl font-bold text-blue-700">{currentHamd.mde.toFixed(2)} pts</div>
+            <div className="text-gray-500">d = {currentHamd.effectSize.toFixed(2)}</div>
+            {(useRasch || useMFRM) && (
+              <div className="text-xs text-green-600">(was {currentHamd.baselineMDE?.toFixed(2)} pts)</div>
+            )}
+          </div>
+          <div className="bg-green-50 p-3 rounded">
+            <div className="text-gray-500">Retention MDE</div>
+            <div className="text-xl font-bold text-green-700">{currentRetention.mde.toFixed(1)} pp</div>
+            <div className="text-gray-500">{currentRetention.treatmentRate.toFixed(1)}% vs {currentRetention.controlRate}%</div>
+            <div className="text-xs text-gray-400">(binary: {currentRetention.binaryMDE?.toFixed(1)} pp)</div>
+          </div>
+          <div className="bg-purple-50 p-3 rounded">
+            <div className="text-gray-500">Clusters</div>
+            <div className="text-xl font-bold text-purple-700">{currentHamd.nClusters}</div>
+            <div className="text-gray-500">75 tx / 25 ctrl</div>
+          </div>
+          <div className="bg-orange-50 p-3 rounded">
+            <div className="text-gray-500">Completers</div>
+            <div className="text-xl font-bold text-orange-700">{currentHamd.nCompleters}</div>
+            <div className="text-gray-500">after {(controlAttrition*100).toFixed(0)}% attrition</div>
+          </div>
+          <div className={`p-3 rounded ${(useRasch || useMFRM) ? 'bg-green-50' : 'bg-gray-50'}`}>
+            <div className="text-gray-500">Measurement</div>
+            <div className="text-sm font-bold text-gray-700">
+              {useRasch && useMFRM ? 'Rasch + MFRM' : useRasch ? 'Rasch PCM' : useMFRM ? 'MFRM only' : 'Sum score'}
+            </div>
+            {(useRasch || useMFRM) && (
+              <div className="text-xs text-green-600">-{currentHamd.varianceReduction?.toFixed(1)}% variance</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Parameter Controls */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <h2 className="font-semibold mb-3">Parameters</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Power</label>
+            <select 
+              value={power} 
+              onChange={(e) => setPower(parseFloat(e.target.value))}
+              className="w-full border rounded p-2"
+            >
+              <option value={0.70}>70%</option>
+              <option value={0.75}>75%</option>
+              <option value={0.80}>80%</option>
+              <option value={0.85}>85%</option>
+              <option value={0.90}>90%</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Alpha (BH-adjusted)</label>
+            <select 
+              value={alpha} 
+              onChange={(e) => setAlpha(parseFloat(e.target.value))}
+              className="w-full border rounded p-2"
+            >
+              <option value={0.05}>0.05 (no correction)</option>
+              <option value={0.025}>0.025 (BH conservative)</option>
+              <option value={0.01}>0.01 (stringent)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Patients/Cluster</label>
+            <select 
+              value={patientsPerCluster} 
+              onChange={(e) => setPatientsPerCluster(parseInt(e.target.value))}
+              className="w-full border rounded p-2"
+            >
+              <option value={5}>5</option>
+              <option value={8}>8</option>
+              <option value={10}>10</option>
+              <option value={12}>12</option>
+              <option value={15}>15</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Control Attrition</label>
+            <select 
+              value={controlAttrition} 
+              onChange={(e) => setControlAttrition(parseFloat(e.target.value))}
+              className="w-full border rounded p-2"
+            >
+              <option value={0.20}>20%</option>
+              <option value={0.25}>25%</option>
+              <option value={0.30}>30%</option>
+              <option value={0.35}>35%</option>
+              <option value={0.40}>40%</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">HAM-D ICC: {iccHamd}</label>
+            <input 
+              type="range" 
+              min="0.01" 
+              max="0.10" 
+              step="0.01" 
+              value={iccHamd}
+              onChange={(e) => setIccHamd(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">HAM-D R²: {r2Hamd}</label>
+            <input 
+              type="range" 
+              min="0.20" 
+              max="0.50" 
+              step="0.05" 
+              value={r2Hamd}
+              onChange={(e) => setR2Hamd(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Retention ICC: {iccRetention}</label>
+            <input 
+              type="range" 
+              min="0.01" 
+              max="0.10" 
+              step="0.01" 
+              value={iccRetention}
+              onChange={(e) => setIccRetention(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Retention R²: {r2Retention}</label>
+            <input 
+              type="range" 
+              min="0.00" 
+              max="0.20" 
+              step="0.02" 
+              value={r2Retention}
+              onChange={(e) => setR2Retention(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Survival efficiency: {survivalEfficiency}×</label>
+            <input 
+              type="range" 
+              min="1" 
+              max="5" 
+              step="0.5" 
+              value={survivalEfficiency}
+              onChange={(e) => setSurvivalEfficiency(parseFloat(e.target.value))}
+              className="w-full"
+            />
+            <div className="text-xs text-gray-400">1× = binary, 4-5× = continuous monitoring</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Measurement Model Controls */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <h2 className="font-semibold mb-3">Measurement Model (HAM-D)</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="flex items-center">
+            <input 
+              type="checkbox" 
+              id="useRasch"
+              checked={useRasch}
+              onChange={(e) => setUseRasch(e.target.checked)}
+              className="mr-2 h-4 w-4"
+            />
+            <label htmlFor="useRasch" className="text-sm">Rasch PCM Scoring</label>
+          </div>
+          <div className="flex items-center">
+            <input 
+              type="checkbox" 
+              id="useMFRM"
+              checked={useMFRM}
+              onChange={(e) => setUseMFRM(e.target.checked)}
+              className="mr-2 h-4 w-4"
+            />
+            <label htmlFor="useMFRM" className="text-sm">MFRM Rater Adjustment</label>
+          </div>
+          <div className="col-span-2 text-sm text-gray-600">
+            {(useRasch || useMFRM) && (
+              <span className="text-green-600 font-medium">
+                Variance reduction: {currentHamd.varianceReduction?.toFixed(1)}% → MDE: {currentHamd.mde.toFixed(2)} pts (was {currentHamd.baselineMDE?.toFixed(2)})
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {(useRasch || useMFRM) && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Sum score reliability: {sumScoreReliability}</label>
+              <input 
+                type="range" 
+                min="0.80" 
+                max="0.92" 
+                step="0.01" 
+                value={sumScoreReliability}
+                onChange={(e) => setSumScoreReliability(parseFloat(e.target.value))}
+                className="w-full"
+                disabled={!useRasch}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Rasch reliability: {raschReliability}</label>
+              <input 
+                type="range" 
+                min="0.85" 
+                max="0.95" 
+                step="0.01" 
+                value={raschReliability}
+                onChange={(e) => setRaschReliability(parseFloat(e.target.value))}
+                className="w-full"
+                disabled={!useRasch}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Rater variance %: {(raterVarianceProp * 100).toFixed(0)}%</label>
+              <input 
+                type="range" 
+                min="0.03" 
+                max="0.15" 
+                step="0.01" 
+                value={raterVarianceProp}
+                onChange={(e) => setRaterVarianceProp(parseFloat(e.target.value))}
+                className="w-full"
+                disabled={!useMFRM}
+              />
+            </div>
+            <div className="text-xs text-gray-500 flex items-center">
+              <div>
+                <div><strong>Rasch PCM:</strong> Interval scoring, item weighting</div>
+                <div><strong>MFRM:</strong> Removes rater severity/leniency effects</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        {/* HAM-D Chart */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <h2 className="font-semibold mb-1">Depression Severity (HAM-D)</h2>
+          {(useRasch || useMFRM) && (
+            <p className="text-xs text-green-600 mb-2">
+              Measurement optimization: -{currentHamd.varianceReduction?.toFixed(1)}% variance
+            </p>
+          )}
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={powerData} margin={{ bottom: 15, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="n" 
+                label={{ value: 'Total N (patients)', position: 'bottom', offset: 0 }}
+              />
+              <YAxis 
+                label={{ value: 'MDE (HAM-D points)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                domain={[0, 4]}
+              />
+              <Tooltip 
+                formatter={(value, name) => {
+                  if (name === 'With Rasch/MFRM' || name === 'MDE') return [value.toFixed(2) + ' pts', useRasch || useMFRM ? 'MDE (optimized)' : 'MDE'];
+                  if (name === 'Sum score baseline') return [value.toFixed(2) + ' pts', 'MDE (sum score)'];
+                  return [value, name];
+                }}
+                labelFormatter={(n) => `N = ${n} (${Math.round(n/patientsPerCluster)} clusters)`}
+              />
+              <Area 
+                type="monotone" 
+                dataKey={() => 3} 
+                fill="#dcfce7" 
+                stroke="none"
+                fillOpacity={0.5}
+                legendType="none"
+                tooltipType="none"
+              />
+              <Area 
+                type="monotone" 
+                dataKey={() => 2} 
+                fill="#bbf7d0" 
+                stroke="none"
+                fillOpacity={0.5}
+                legendType="none"
+                tooltipType="none"
+              />
+              {(useRasch || useMFRM) && (
+                <Line 
+                  type="monotone" 
+                  dataKey="hamdBaselineMDE" 
+                  stroke="#9ca3af" 
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  name="Sum score baseline"
+                />
+              )}
+              <Line 
+                type="monotone" 
+                dataKey="hamdMDE" 
+                stroke="#2563eb" 
+                strokeWidth={2}
+                dot={false}
+                name={useRasch || useMFRM ? "With Rasch/MFRM" : "MDE"}
+              />
+              <ReferenceLine x={1000} stroke="#666" strokeDasharray="5 5" />
+              <ReferenceLine y={2} stroke="#16a34a" strokeDasharray="3 3" label={{ value: '2 pts', position: 'right', fill: '#16a34a', fontSize: 11 }} />
+              <ReferenceLine y={3} stroke="#22c55e" strokeDasharray="3 3" label={{ value: '3 pts', position: 'right', fill: '#22c55e', fontSize: 11 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="text-sm text-gray-600 mt-2">
+            <span className="inline-block w-3 h-3 bg-green-200 mr-1"></span> Minimally clinically important difference (2-3 points)
+            {(useRasch || useMFRM) && (
+              <span className="ml-3 text-xs">
+                | <span className="text-gray-400">---</span> Sum score baseline
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Retention Chart */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <h2 className="font-semibold mb-1">Study Retention</h2>
+          <p className="text-xs text-gray-500 mb-3">Survival analysis with {survivalEfficiency}× efficiency (binary MDE: {currentRetention.binaryMDE?.toFixed(1) || 'N/A'} pp)</p>
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={powerData} margin={{ bottom: 15, left: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="n" 
+                label={{ value: 'Total N (patients)', position: 'bottom', offset: 0 }}
+              />
+              <YAxis 
+                label={{ value: 'MDE (percentage points)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                domain={[0, 15]}
+              />
+              <Tooltip 
+                formatter={(value, name) => {
+                  if (name === 'retentionMDE') return [value.toFixed(2) + ' pp', 'MDE'];
+                  return [value, name];
+                }}
+                labelFormatter={(n) => `N = ${n} (${Math.round(n/patientsPerCluster)} clusters)`}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="retentionMDE" 
+                stroke="#16a34a" 
+                strokeWidth={2}
+                dot={false}
+              />
+              <ReferenceLine x={1000} stroke="#666" strokeDasharray="5 5" />
+              <ReferenceLine y={5} stroke="#f59e0b" strokeDasharray="3 3" label={{ value: '5 pp', position: 'right', fill: '#f59e0b', fontSize: 11 }} />
+              <ReferenceLine y={7} stroke="#f97316" strokeDasharray="3 3" label={{ value: '7 pp', position: 'right', fill: '#f97316', fontSize: 11 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="text-sm text-gray-600 mt-2">
+            Control attrition: {(controlAttrition * 100).toFixed(0)}% → Treatment: {(controlAttrition * 100 - currentRetention.mde).toFixed(1)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Sample Size Table */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <h2 className="font-semibold mb-3">Sample Size Requirements</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2">Total N</th>
+                <th className="text-left p-2">Clusters</th>
+                <th className="text-left p-2">HAM-D MDE</th>
+                {(useRasch || useMFRM) && <th className="text-left p-2 text-gray-400">(Sum score)</th>}
+                <th className="text-left p-2">Cohen's d</th>
+                <th className="text-left p-2">Retention MDE</th>
+                <th className="text-left p-2">Treatment Attrition</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[400, 500, 600, 750, 800, 1000, 1100, 1200, 1300].map(n => {
+                const hamd = calcHamdMDE(n);
+                const retention = calcRetentionMDE(n);
+                const isCurrentDesign = n === 1000;
+                return (
+                  <tr key={n} className={`border-b ${isCurrentDesign ? 'bg-blue-50 font-semibold' : ''}`}>
+                    <td className="p-2">{n}</td>
+                    <td className="p-2">{hamd.nClusters}</td>
+                    <td className="p-2">{hamd.mde.toFixed(2)} pts</td>
+                    {(useRasch || useMFRM) && <td className="p-2 text-gray-400">{hamd.baselineMDE.toFixed(2)} pts</td>}
+                    <td className="p-2">{hamd.effectSize.toFixed(2)}</td>
+                    <td className="p-2">{retention.mde.toFixed(1)} pp</td>
+                    <td className="p-2">{retention.treatmentRate.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {(useRasch || useMFRM) && (
+          <p className="text-xs text-gray-500 mt-2">
+            Gray column shows MDE with traditional sum scoring for comparison
+          </p>
+        )}
+      </div>
+
+      {/* Key Findings */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h2 className="font-semibold mb-3">Key Findings</h2>
+        <div className="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <h3 className="font-medium text-gray-700 mb-2">To detect MCID (2 HAM-D points):</h3>
+            <ul className="list-disc list-inside text-gray-600">
+              <li>Need N ≈ {nFor2HAMDpoints} patients</li>
+              <li>That's {Math.round(nFor2HAMDpoints/patientsPerCluster)} clusters</li>
+              <li>Current design (N=1000) has {'>'}90% power for this</li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-700 mb-2">Smaller trial trade-offs:</h3>
+            <ul className="list-disc list-inside text-gray-600">
+              <li>N=750: MDE = {calcHamdMDE(750).mde.toFixed(2)} pts / {calcRetentionMDE(750).mde.toFixed(1)} pp</li>
+              <li>N=600: MDE = {calcHamdMDE(600).mde.toFixed(2)} pts / {calcRetentionMDE(600).mde.toFixed(1)} pp</li>
+              <li>N=500: MDE = {calcHamdMDE(500).mde.toFixed(2)} pts / {calcRetentionMDE(500).mde.toFixed(1)} pp</li>
+            </ul>
+          </div>
+        </div>
+        
+        {(useRasch || useMFRM) && (
+          <div className="mt-4 p-3 bg-green-50 rounded">
+            <h3 className="font-medium text-green-800 mb-1">Measurement Model Impact</h3>
+            <p className="text-green-700 text-sm">
+              With {useRasch && useMFRM ? 'Rasch PCM + MFRM' : useRasch ? 'Rasch PCM' : 'MFRM'}, 
+              variance is reduced by {currentHamd.varianceReduction?.toFixed(1)}%. 
+              This is equivalent to increasing sample size by ~{((1 / measurementVarianceMultiplier - 1) * 100).toFixed(0)}% 
+              (N=1000 performs like N≈{Math.round(1000 / measurementVarianceMultiplier)} with sum scores).
+            </p>
+            <p className="text-green-600 text-xs mt-1">
+              MDE improvement: {currentHamd.baselineMDE?.toFixed(2)} pts → {currentHamd.mde.toFixed(2)} pts 
+              ({((1 - currentHamd.mde / currentHamd.baselineMDE) * 100).toFixed(1)}% reduction)
+            </p>
+          </div>
+        )}
+        
+        <div className="mt-4 p-3 bg-yellow-50 rounded">
+          <h3 className="font-medium text-yellow-800 mb-1">Recommendation</h3>
+          <p className="text-yellow-700 text-sm">
+            If expecting effect sizes ≥2 HAM-D points (MCID), a smaller trial of N≈{nFor2HAMDpoints} could be justified. 
+            However, the current N=1000 provides important buffer for: (1) higher-than-expected attrition, 
+            (2) lower-than-expected covariate prediction, (3) subgroup analyses, and (4) regulatory credibility.
+          </p>
+        </div>
+      </div>
+
+      {/* Assumptions */}
+      <div className="mt-6 text-xs text-gray-500">
+        <h3 className="font-medium mb-1">Assumptions:</h3>
+        <ul className="list-disc list-inside">
+          <li>3:1 treatment:control cluster allocation</li>
+          <li>HAM-D SD = 7, repeated measures at 4 timepoints (r≈0.5)</li>
+          <li>IPCW variance inflation factor = 1.20</li>
+          <li>Survival efficiency vs binary: 1× = week-16 binary only; 2-3× = monthly dropout checks; 4-5× = continuous monitoring with survival TMLE</li>
+          {useRasch && (
+            <li>Rasch PCM: Improves reliability from {sumScoreReliability.toFixed(2)} (sum score) to {raschReliability.toFixed(2)} (person separation)</li>
+          )}
+          {useMFRM && (
+            <li>MFRM: Removes {(raterVarianceProp * 100).toFixed(0)}% of variance attributable to rater severity/leniency differences</li>
+          )}
+        </ul>
+        
+        {(useRasch || useMFRM) && (
+          <div className="mt-3 p-2 bg-blue-50 rounded">
+            <h4 className="font-medium text-blue-800">Measurement Model Details:</h4>
+            <ul className="list-disc list-inside text-blue-700 mt-1">
+              {useRasch && (
+                <>
+                  <li>Rasch Partial Credit Model provides interval-level person estimates (θ)</li>
+                  <li>Items weighted by information; more precise than equal-weighted sum</li>
+                  <li>Enables DIF testing across countries</li>
+                </>
+              )}
+              {useMFRM && (
+                <>
+                  <li>Multi-Facet Rasch Model estimates rater severity parameters (λ)</li>
+                  <li>Patient estimates adjusted: θ_adj = θ_raw - λ_rater</li>
+                  <li>Requires rater connectivity design (sparse double-rating or anchor cases)</li>
+                </>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
