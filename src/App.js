@@ -662,6 +662,78 @@ export default function PowerCurves() {
           </div>
         )}
       </div>
+
+      {/* ICC Validation Controls */}
+      <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
+        <h2 className="font-semibold mb-3 text-sm md:text-base">
+          ICC Validation (Treatment Arm)
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Expected ICC: {expectedIcc}
+            </label>
+            <input
+              type="range"
+              min="0.70"
+              max="0.95"
+              step="0.01"
+              value={expectedIcc}
+              onChange={(e) => setExpectedIcc(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Target ICC: {targetIcc}
+            </label>
+            <input
+              type="range"
+              min="0.60"
+              max="0.80"
+              step="0.05"
+              value={targetIcc}
+              onChange={(e) => setTargetIcc(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Follow-ups
+            </label>
+            <select
+              value={nFollowups}
+              onChange={(e) => setNFollowups(parseInt(e.target.value))}
+              className="w-full border rounded p-1.5 md:p-2 text-sm"
+            >
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+              <option value={5}>5</option>
+              <option value={6}>6</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Cluster ICC: {iccClusterCorr}
+            </label>
+            <input
+              type="range"
+              min="0.01"
+              max="0.10"
+              step="0.01"
+              value={iccClusterCorr}
+              onChange={(e) => setIccClusterCorr(parseFloat(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          Tests if AURORA-clinician agreement exceeds threshold for "good"
+          reliability (ICC {">"} {targetIcc})
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
         {/* HAM-D Chart */}
         <div className="bg-white rounded-lg shadow p-3 md:p-4">
