@@ -23,6 +23,7 @@ const defaults = {
   r2Hamd: 0.35,
   r2Retention: 0.05,
   patientsPerCluster: 10,
+  nClinicians: 100,
   clusterSizeCV: 0,
   controlAttrition: 0.3,
   treatmentRatio: 3,
@@ -61,6 +62,7 @@ export default function PowerCurves() {
   const [patientsPerCluster, setPatientsPerCluster] = useState(
     initial.patientsPerCluster,
   );
+  const [nClinicians, setNClinicians] = useState(initial.nClinicians || 100);
   const [clusterSizeCV, setClusterSizeCV] = useState(initial.clusterSizeCV);
   const [controlAttrition, setControlAttrition] = useState(
     initial.controlAttrition,
@@ -153,6 +155,7 @@ export default function PowerCurves() {
       r2Hamd,
       r2Retention,
       patientsPerCluster,
+      nClinicians,
       clusterSizeCV,
       controlAttrition,
       treatmentRatio,
@@ -179,6 +182,7 @@ export default function PowerCurves() {
     r2Hamd,
     r2Retention,
     patientsPerCluster,
+    nClinicians,
     clusterSizeCV,
     controlAttrition,
     treatmentRatio,
@@ -425,6 +429,7 @@ export default function PowerCurves() {
     r2Hamd,
     r2Retention,
     patientsPerCluster,
+    nClinicians,
     clusterSizeCV,
     controlAttrition,
     treatmentRatio,
@@ -438,7 +443,7 @@ export default function PowerCurves() {
   ]);
 
   // Current design values
-  const currentN = 1000;
+  const currentN = nClinicians * patientsPerCluster;
   const currentHamd = calcHamdMDE(currentN);
   const currentRetention = calcRetentionMDE(currentN);
   const currentIcc = calcIccValidation(currentN);
@@ -523,7 +528,7 @@ cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
       {/* Current Design Summary */}
       <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
         <h2 className="font-semibold mb-3 text-sm md:text-base">
-          Current Design (N=1,000)
+          Current Design (N={currentN.toLocaleString()})
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs md:text-sm">
           <div className="bg-blue-50 p-2 md:p-3 rounded">
@@ -649,7 +654,23 @@ cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Patients/Cluster
+              Clinicians
+            </label>
+            <select
+              value={nClinicians}
+              onChange={(e) => setNClinicians(parseInt(e.target.value))}
+              className="w-full border rounded p-1.5 md:p-2 text-sm"
+            >
+              <option value={60}>60</option>
+              <option value={80}>80</option>
+              <option value={100}>100</option>
+              <option value={120}>120</option>
+              <option value={140}>140</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Patients/Clinician
             </label>
             <select
               value={patientsPerCluster}
