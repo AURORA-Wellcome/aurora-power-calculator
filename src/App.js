@@ -997,8 +997,8 @@ export default function PowerCurves() {
             />
             <Tooltip
               formatter={(value, name) => {
-                if (name === "iccCiWidth")
-                  return [(value / 2).toFixed(3), "CI half-width (±)"];
+                if (name === "CI half-width")
+                  return [value.toFixed(3), "CI half-width (±)"];
                 return [value, name];
               }}
               labelFormatter={(n) => {
