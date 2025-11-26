@@ -97,6 +97,52 @@ export default function PowerCurves() {
   // R code section visibility
   const [showRCode, setShowRCode] = useState(false);
 
+  // WebR state
+  const [webRStatus, setWebRStatus] = useState("idle"); // idle, loading, ready, running, error
+  const [webROutput, setWebROutput] = useState("");
+  const [webRInstance, setWebRInstance] = useState(null);
+
+  // Load and run R code in browser using WebR
+  const runRCode = async (rCode) => {
+    if (webRStatus === "running") return;
+
+    try {
+      let webR = webRInstance;
+
+      if (!webR) {
+        setWebRStatus("loading");
+        setWebROutput("Downloading R runtime (~25MB, first time only)...");
+
+        // Dynamically import WebR
+        const { WebR } = await import(
+          "https://webr.r-wasm.org/latest/webr.mjs"
+        );
+        webR = new WebR();
+        await webR.init();
+        setWebRInstance(webR);
+        setWebRStatus("ready");
+      }
+
+      setWebRStatus("running");
+      setWebROutput("Running R code...");
+
+      // Capture output
+      const result = await webR.evalRString(`
+        capture.output({
+          ${rCode}
+        }, type = "output")
+      `);
+
+      // Parse the result - it comes as a string with escaped newlines
+      const output = result.replace(/\\n/g, "\n");
+      setWebROutput(output);
+      setWebRStatus("ready");
+    } catch (error) {
+      setWebRStatus("error");
+      setWebROutput(`Error: ${error.message}`);
+    }
+  };
+
   // Save settings to localStorage whenever they change
   useEffect(() => {
     const settings = {
@@ -396,6 +442,74 @@ export default function PowerCurves() {
   const currentHamd = calcHamdMDE(currentN);
   const currentRetention = calcRetentionMDE(currentN);
   const currentIcc = calcIccValidation(currentN);
+
+  // R code for WebR execution (without template literal escaping issues)
+  const rCodeForExecution = `
+total_n <- 1000
+patients_per_cluster <- ${patientsPerCluster}
+cluster_size_cv <- ${clusterSizeCV}
+treatment_ratio <- ${treatmentRatio}
+control_attrition <- ${controlAttrition}
+power <- ${power}
+alpha <- ${alpha}
+z_alpha <- qnorm(1 - alpha)
+z_beta <- qnorm(power)
+icc_hamd <- ${iccHamd}
+r2_hamd <- ${r2Hamd}
+sigma_hamd <- 7
+icc_retention <- ${iccRetention}
+r2_retention <- ${r2Retention}
+survival_efficiency <- ${survivalEfficiency}
+
+calc_hamd_mde <- function(total_n) {
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+  n_control_clusters <- n_clusters - n_treatment_clusters
+  n_treatment <- n_treatment_clusters * patients_per_cluster * (1 - control_attrition)
+  n_control <- n_control_clusters * patients_per_cluster * (1 - control_attrition)
+  n_harmonic <- (2 * n_treatment * n_control) / (n_treatment + n_control)
+  sigma2 <- sigma_hamd^2
+  sigma2_adj <- sigma2 * (1 - r2_hamd)
+  cluster_size <- patients_per_cluster * (1 - control_attrition)
+  design_effect <- (1 + (cluster_size - 1) * icc_hamd) * (1 + cluster_size_cv^2)
+  ipcw_vif <- 1.2
+  repeated_measures_gain <- 1.43
+  net_variance <- (sigma2_adj * design_effect * ipcw_vif) / repeated_measures_gain
+  mde <- (z_alpha + z_beta) * sqrt(2 * net_variance / n_harmonic)
+  list(mde = mde, effect_size = mde / sigma_hamd, n_clusters = n_clusters, n_completers = round(n_treatment + n_control))
+}
+
+calc_retention_mde <- function(total_n) {
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+  n_control_clusters <- n_clusters - n_treatment_clusters
+  n_treatment <- n_treatment_clusters * patients_per_cluster
+  n_control <- n_control_clusters * patients_per_cluster
+  design_effect <- (1 + (patients_per_cluster - 1) * icc_retention) * (1 + cluster_size_cv^2)
+  p0 <- control_attrition
+  base_se <- sqrt(p0 * (1 - p0) * (1/n_treatment + 1/n_control))
+  clustered_se <- base_se * sqrt(design_effect)
+  adjusted_se <- clustered_se * sqrt(1 - r2_retention)
+  survival_se <- adjusted_se / sqrt(survival_efficiency)
+  mde <- (z_alpha + z_beta) * survival_se
+  list(mde_pp = mde * 100, control_rate = p0 * 100, treatment_rate = (p0 - mde) * 100)
+}
+
+hamd_result <- calc_hamd_mde(total_n)
+retention_result <- calc_retention_mde(total_n)
+
+cat("HAM-D Results (N =", total_n, "):\\n")
+cat("  MDE:", round(hamd_result$mde, 2), "points\\n")
+cat("  Cohen's d:", round(hamd_result$effect_size, 2), "\\n")
+cat("  Clusters:", hamd_result$n_clusters, "\\n")
+cat("  Completers:", hamd_result$n_completers, "\\n\\n")
+cat("Retention Results (N =", total_n, "):\\n")
+cat("  MDE:", round(retention_result$mde_pp, 1), "percentage points\\n")
+cat("  Treatment rate:", round(retention_result$treatment_rate, 1), "%\\n")
+cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
+`;
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
@@ -1288,10 +1402,46 @@ export default function PowerCurves() {
         </button>
         {showRCode && (
           <div className="p-3 md:p-4 pt-0 border-t">
-            <p className="text-xs text-gray-500 mb-3">
-              R code to reproduce these power calculations. Copy and run in R to
-              verify results.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <p className="text-xs text-gray-500">
+                R code to reproduce these power calculations.
+              </p>
+              <button
+                onClick={() => runRCode(rCodeForExecution)}
+                disabled={webRStatus === "loading" || webRStatus === "running"}
+                className={`px-3 py-1 text-xs rounded ${
+                  webRStatus === "loading" || webRStatus === "running"
+                    ? "bg-gray-300 text-gray-500 cursor-wait"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {webRStatus === "loading"
+                  ? "Downloading R..."
+                  : webRStatus === "running"
+                    ? "Running..."
+                    : webRStatus === "ready"
+                      ? "Run Again"
+                      : "Run in Browser"}
+              </button>
+              {webRStatus === "loading" && (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs text-gray-500">~25MB download</span>
+                </div>
+              )}
+            </div>
+
+            {webROutput && (
+              <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded">
+                <div className="text-xs font-medium text-green-800 mb-1">
+                  R Output:
+                </div>
+                <pre className="text-xs text-green-900 whitespace-pre-wrap font-mono">
+                  {webROutput}
+                </pre>
+              </div>
+            )}
+
             <pre className="bg-gray-900 text-gray-100 p-3 md:p-4 rounded text-xs overflow-x-auto">
               <code>{`# AURORA Trial Power Calculations
 # Reproduces the minimum detectable effect (MDE) calculations
