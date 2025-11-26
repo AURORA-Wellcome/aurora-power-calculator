@@ -611,6 +611,7 @@ export default function PowerCurves() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="n"
+                ticks={[400, 600, 800, 1000, 1200]}
                 label={{
                   value: "Total N (patients)",
                   position: "bottom",
@@ -738,6 +739,7 @@ export default function PowerCurves() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="n"
+                ticks={[400, 600, 800, 1000, 1200]}
                 label={{
                   value: "Total N (patients)",
                   position: "bottom",
