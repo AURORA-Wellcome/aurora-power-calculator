@@ -99,6 +99,78 @@ export default function PowerCurves() {
   // R code section visibility
   const [showRCode, setShowRCode] = useState(false);
 
+  // Check if current settings match defaults
+  const isDefaultSettings = useMemo(() => {
+    return (
+      power === defaults.power &&
+      alpha === defaults.alpha &&
+      iccHamd === defaults.iccHamd &&
+      iccRetention === defaults.iccRetention &&
+      r2Hamd === defaults.r2Hamd &&
+      r2Retention === defaults.r2Retention &&
+      patientsPerCluster === defaults.patientsPerCluster &&
+      nClinicians === defaults.nClinicians &&
+      clusterSizeCV === defaults.clusterSizeCV &&
+      controlAttrition === defaults.controlAttrition &&
+      treatmentRatio === defaults.treatmentRatio &&
+      measurementModel === defaults.measurementModel &&
+      sumScoreReliability === defaults.sumScoreReliability &&
+      raschReliability === defaults.raschReliability &&
+      raterVarianceProp === defaults.raterVarianceProp &&
+      targetIcc === defaults.targetIcc &&
+      expectedIcc === defaults.expectedIcc &&
+      iccClusterCorr === defaults.iccClusterCorr &&
+      nFollowups === defaults.nFollowups &&
+      survivalEfficiency === defaults.survivalEfficiency
+    );
+  }, [
+    power,
+    alpha,
+    iccHamd,
+    iccRetention,
+    r2Hamd,
+    r2Retention,
+    patientsPerCluster,
+    nClinicians,
+    clusterSizeCV,
+    controlAttrition,
+    treatmentRatio,
+    measurementModel,
+    sumScoreReliability,
+    raschReliability,
+    raterVarianceProp,
+    targetIcc,
+    expectedIcc,
+    iccClusterCorr,
+    nFollowups,
+    survivalEfficiency,
+  ]);
+
+  // Reset all settings to defaults
+  const resetToDefaults = () => {
+    setPower(defaults.power);
+    setAlpha(defaults.alpha);
+    setIccHamd(defaults.iccHamd);
+    setIccRetention(defaults.iccRetention);
+    setR2Hamd(defaults.r2Hamd);
+    setR2Retention(defaults.r2Retention);
+    setPatientsPerCluster(defaults.patientsPerCluster);
+    setNClinicians(defaults.nClinicians);
+    setClusterSizeCV(defaults.clusterSizeCV);
+    setControlAttrition(defaults.controlAttrition);
+    setTreatmentRatio(defaults.treatmentRatio);
+    setMeasurementModel(defaults.measurementModel);
+    setSumScoreReliability(defaults.sumScoreReliability);
+    setRaschReliability(defaults.raschReliability);
+    setRaterVarianceProp(defaults.raterVarianceProp);
+    setTargetIcc(defaults.targetIcc);
+    setExpectedIcc(defaults.expectedIcc);
+    setIccClusterCorr(defaults.iccClusterCorr);
+    setNFollowups(defaults.nFollowups);
+    setSurvivalEfficiency(defaults.survivalEfficiency);
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   // WebR state
   const [webRStatus, setWebRStatus] = useState("idle"); // idle, loading, ready, running, error
   const [webROutput, setWebROutput] = useState("");
@@ -476,7 +548,7 @@ treatment_ratio <- ${treatmentRatio}
 control_attrition <- ${controlAttrition}
 power <- ${power}
 alpha <- ${alpha}
-z_alpha <- qnorm(1 - alpha)
+z_alpha <- qnorm(1 - alpha/2)
 z_beta <- qnorm(power)
 icc_hamd <- ${iccHamd}
 r2_hamd <- ${r2Hamd}
@@ -669,7 +741,20 @@ cat(paste0("  Can rule out ICC < ", target_icc, ": ", ifelse(icc_result$can_rule
 
       {/* Parameter Controls */}
       <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
-        <h2 className="font-semibold mb-3 text-sm md:text-base">Parameters</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="font-semibold text-sm md:text-base">Parameters</h2>
+          <button
+            onClick={resetToDefaults}
+            disabled={isDefaultSettings}
+            className={`px-3 py-1 text-xs rounded ${
+              isDefaultSettings
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Reset to Defaults
+          </button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
@@ -1530,7 +1615,7 @@ control_attrition <- ${controlAttrition}            # Expected attrition rate
 # Statistical parameters
 power <- ${power}
 alpha <- ${alpha}                      # Two-sided alpha (Benjamini-Hochberg adjusted)
-z_alpha <- qnorm(1 - alpha)            # Z-score for alpha
+z_alpha <- qnorm(1 - alpha/2)          # Z-score for two-tailed alpha
 z_beta <- qnorm(power)                 # Z-score for power
 
 # HAM-D outcome parameters
