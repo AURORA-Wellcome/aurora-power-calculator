@@ -1422,15 +1422,12 @@ cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
           <span className="text-gray-500">{showRCode ? "−" : "+"}</span>
         </button>
         {showRCode && (
-          <div className="p-3 md:p-4 pt-0 border-t">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <p className="text-xs text-gray-500">
-                R code to reproduce these power calculations.
-              </p>
+          <div className="p-3 md:p-4 border-t">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
               <button
                 onClick={() => runRCode(rCodeForExecution)}
                 disabled={webRStatus === "loading" || webRStatus === "running"}
-                className={`px-3 py-1 text-xs rounded ${
+                className={`px-4 py-2 text-sm font-medium rounded ${
                   webRStatus === "loading" || webRStatus === "running"
                     ? "bg-gray-300 text-gray-500 cursor-wait"
                     : "bg-blue-600 text-white hover:bg-blue-700"
@@ -1450,6 +1447,9 @@ cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
                   <span className="text-xs text-gray-500">~25MB download</span>
                 </div>
               )}
+              <span className="text-xs text-gray-500">
+                or copy the code below to run in R
+              </span>
             </div>
 
             {webROutput && (
