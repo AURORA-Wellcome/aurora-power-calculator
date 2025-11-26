@@ -118,7 +118,7 @@ export default function PowerCurves() {
     const clusterSize = patientsPerCluster * (1 - controlAttrition); // after attrition
     const designEffect = 1 + (clusterSize - 1) * iccHamd;
 
-    // IPCW variance inflation
+    // Inverse Probability of Censoring Weights variance inflation
     const ipcwVIF = 1.2;
 
     // Repeated measures efficiency (4 timepoints, correlation ~0.5)
@@ -314,7 +314,9 @@ export default function PowerCurves() {
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs md:text-sm">
           <div className="bg-blue-50 p-2 md:p-3 rounded">
-            <div className="text-gray-500 text-xs">HAM-D MDE</div>
+            <div className="text-gray-500 text-xs">
+              HAM-D Min Detectable Effect
+            </div>
             <div className="text-lg md:text-xl font-bold text-blue-700">
               {currentHamd.mde.toFixed(2)} pts
             </div>
@@ -328,7 +330,9 @@ export default function PowerCurves() {
             )}
           </div>
           <div className="bg-green-50 p-2 md:p-3 rounded">
-            <div className="text-gray-500 text-xs">Retention MDE</div>
+            <div className="text-gray-500 text-xs">
+              Retention Min Detectable Effect
+            </div>
             <div className="text-lg md:text-xl font-bold text-green-700">
               {currentRetention.mde.toFixed(1)} pp
             </div>
@@ -365,11 +369,11 @@ export default function PowerCurves() {
             <div className="text-gray-500 text-xs">Measurement</div>
             <div className="text-sm font-bold text-gray-700">
               {useRasch && useMFRM
-                ? "Rasch + MFRM"
+                ? "Rasch + Multi-Facet"
                 : useRasch
-                  ? "Rasch PCM"
+                  ? "Rasch Partial Credit"
                   : useMFRM
-                    ? "MFRM only"
+                    ? "Multi-Facet Rasch"
                     : "Sum score"}
             </div>
             {(useRasch || useMFRM) && (
@@ -381,7 +385,9 @@ export default function PowerCurves() {
           <div
             className={`p-2 md:p-3 rounded ${currentIcc.canRuleOutPoor ? "bg-teal-50" : "bg-red-50"}`}
           >
-            <div className="text-gray-500 text-xs">ICC Precision</div>
+            <div className="text-gray-500 text-xs">
+              Intraclass Correlation Precision
+            </div>
             <div
               className={`text-lg md:text-xl font-bold ${currentIcc.canRuleOutPoor ? "text-teal-700" : "text-red-700"}`}
             >
@@ -416,15 +422,15 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Alpha (BH-adjusted)
+              Alpha (Benjamini-Hochberg adjusted)
             </label>
             <select
               value={alpha}
               onChange={(e) => setAlpha(parseFloat(e.target.value))}
               className="w-full border rounded p-1.5 md:p-2 text-sm"
             >
-              <option value={0.05}>0.05</option>
-              <option value={0.025}>0.025 (BH)</option>
+              <option value={0.05}>0.05 (none)</option>
+              <option value={0.025}>0.025 (B-H)</option>
               <option value={0.01}>0.01</option>
             </select>
           </div>
@@ -480,7 +486,7 @@ export default function PowerCurves() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-3 md:mt-4">
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              HAM-D ICC: {iccHamd}
+              HAM-D Intraclass Corr: {iccHamd}
             </label>
             <input
               type="range"
@@ -508,7 +514,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Retention ICC: {iccRetention}
+              Retention Intraclass Corr: {iccRetention}
             </label>
             <input
               type="range"
@@ -571,7 +577,7 @@ export default function PowerCurves() {
               className="mr-2 h-4 w-4"
             />
             <label htmlFor="useRasch" className="text-xs md:text-sm">
-              Rasch PCM
+              Rasch Partial Credit Model
             </label>
           </div>
           <div className="flex items-center">
@@ -583,7 +589,7 @@ export default function PowerCurves() {
               className="mr-2 h-4 w-4"
             />
             <label htmlFor="useMFRM" className="text-xs md:text-sm">
-              MFRM Rater Adj
+              Multi-Facet Rasch Rater Adj
             </label>
           </div>
           <div className="col-span-2 text-xs md:text-sm text-gray-600">
@@ -652,10 +658,10 @@ export default function PowerCurves() {
             <div className="text-xs text-gray-500 items-center hidden md:flex">
               <div>
                 <div>
-                  <strong>Rasch PCM:</strong> Interval scoring
+                  <strong>Rasch Partial Credit:</strong> Interval scoring
                 </div>
                 <div>
-                  <strong>MFRM:</strong> Removes rater effects
+                  <strong>Multi-Facet Rasch:</strong> Removes rater effects
                 </div>
               </div>
             </div>
@@ -666,12 +672,12 @@ export default function PowerCurves() {
       {/* ICC Validation Controls */}
       <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
         <h2 className="font-semibold mb-3 text-sm md:text-base">
-          ICC Validation (Treatment Arm)
+          Intraclass Correlation Validation (Treatment Arm)
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Expected ICC: {expectedIcc}
+              Expected Intraclass Corr: {expectedIcc}
             </label>
             <input
               type="range"
@@ -685,7 +691,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Target ICC: {targetIcc}
+              Target Intraclass Corr: {targetIcc}
             </label>
             <input
               type="range"
@@ -715,7 +721,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Cluster ICC: {iccClusterCorr}
+              Cluster Intraclass Corr: {iccClusterCorr}
             </label>
             <input
               type="range"
@@ -730,7 +736,7 @@ export default function PowerCurves() {
         </div>
         <div className="mt-2 text-xs text-gray-500">
           Tests if AURORA-clinician agreement exceeds threshold for "good"
-          reliability (ICC {">"} {targetIcc})
+          reliability (intraclass correlation {">"} {targetIcc})
         </div>
       </div>
 
@@ -856,7 +862,7 @@ export default function PowerCurves() {
             <span className="hidden sm:inline">
               Minimally clinically important difference (2-3 points)
             </span>
-            <span className="sm:hidden">MCID (2-3 pts)</span>
+            <span className="sm:hidden">Min Clinical Diff (2-3 pts)</span>
             {(useRasch || useMFRM) && (
               <span className="ml-3 text-xs">
                 | <span className="text-gray-400">---</span> Sum score baseline
@@ -955,11 +961,11 @@ export default function PowerCurves() {
       {/* ICC Validation Chart */}
       <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
         <h2 className="font-semibold mb-1 text-sm md:text-base">
-          ICC Validation (Treatment Arm Only)
+          Intraclass Correlation Validation (Treatment Arm Only)
         </h2>
         <p className="text-xs text-gray-500 mb-2 md:mb-3">
-          95% CI precision for AURORA-clinician agreement (target: rule out ICC{" "}
-          {"<"} {targetIcc})
+          95% confidence interval precision for AURORA-clinician agreement
+          (target: rule out intraclass correlation {"<"} {targetIcc})
         </p>
         <ResponsiveContainer
           width="100%"
@@ -1044,14 +1050,15 @@ export default function PowerCurves() {
         </ResponsiveContainer>
         <div className="text-xs md:text-sm text-gray-600 mt-2">
           <span className="inline-block w-3 h-3 bg-green-200 mr-1"></span>
-          High precision zone (±0.03-0.05) | Expected ICC: {expectedIcc} |
+          High precision zone (±0.03-0.05) | Expected intraclass corr:{" "}
+          {expectedIcc} |
           {currentIcc.canRuleOutPoor ? (
             <span className="text-teal-600 font-medium ml-1">
-              Can rule out ICC {"<"} {targetIcc}
+              Can rule out intraclass corr {"<"} {targetIcc}
             </span>
           ) : (
             <span className="text-red-600 font-medium ml-1">
-              Cannot rule out ICC {"<"} {targetIcc}
+              Cannot rule out intraclass corr {"<"} {targetIcc}
             </span>
           )}
         </div>
@@ -1082,7 +1089,7 @@ export default function PowerCurves() {
                   Tx Attrition
                 </th>
                 <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
-                  ICC ±
+                  Intraclass Corr ±
                 </th>
               </tr>
             </thead>
@@ -1144,7 +1151,7 @@ export default function PowerCurves() {
         <div className="grid md:grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
           <div>
             <h3 className="font-medium text-gray-700 mb-2">
-              To detect MCID (2 HAM-D points):
+              To detect Minimally Important Diff (2 HAM-D points):
             </h3>
             <ul className="list-disc list-inside text-gray-600">
               <li>Need N ≈ {nFor2HAMDpoints} patients</li>
@@ -1184,10 +1191,10 @@ export default function PowerCurves() {
             <p className="text-green-700 text-sm">
               With{" "}
               {useRasch && useMFRM
-                ? "Rasch PCM + MFRM"
+                ? "Rasch Partial Credit + Multi-Facet Rasch"
                 : useRasch
-                  ? "Rasch PCM"
-                  : "MFRM"}
+                  ? "Rasch Partial Credit Model"
+                  : "Multi-Facet Rasch Model"}
               , variance is reduced by{" "}
               {currentHamd.varianceReduction?.toFixed(1)}%. This is equivalent
               to increasing sample size by ~
@@ -1210,11 +1217,12 @@ export default function PowerCurves() {
         <div className="mt-4 p-3 bg-yellow-50 rounded">
           <h3 className="font-medium text-yellow-800 mb-1">Recommendation</h3>
           <p className="text-yellow-700 text-sm">
-            If expecting effect sizes ≥2 HAM-D points (MCID), a smaller trial of
-            N≈{nFor2HAMDpoints} could be justified. However, the current N=1000
-            provides important buffer for: (1) higher-than-expected attrition,
-            (2) lower-than-expected covariate prediction, (3) subgroup analyses,
-            and (4) regulatory credibility.
+            If expecting effect sizes ≥2 HAM-D points (minimally important
+            difference), a smaller trial of N≈{nFor2HAMDpoints} could be
+            justified. However, the current N=1000 provides important buffer
+            for: (1) higher-than-expected attrition, (2) lower-than-expected
+            covariate prediction, (3) subgroup analyses, and (4) regulatory
+            credibility.
           </p>
         </div>
       </div>
@@ -1225,29 +1233,32 @@ export default function PowerCurves() {
         <ul className="list-disc list-inside">
           <li>{treatmentRatio}:1 treatment:control cluster allocation</li>
           <li>HAM-D SD = 7, repeated measures at 4 timepoints (r≈0.5)</li>
-          <li>IPCW variance inflation factor = 1.20</li>
+          <li>
+            Inverse Probability of Censoring Weights variance inflation factor =
+            1.20
+          </li>
           <li>
             Survival efficiency vs binary: 1× = week-16 binary only; 2-3× =
             monthly dropout checks; 4-5× = continuous monitoring with survival
-            TMLE
+            Targeted Learning
           </li>
           {useRasch && (
             <li>
-              Rasch PCM: Improves reliability from{" "}
+              Rasch Partial Credit Model: Improves reliability from{" "}
               {sumScoreReliability.toFixed(2)} (sum score) to{" "}
               {raschReliability.toFixed(2)} (person separation)
             </li>
           )}
           {useMFRM && (
             <li>
-              MFRM: Removes {(raterVarianceProp * 100).toFixed(0)}% of variance
-              attributable to rater severity/leniency differences
+              Multi-Facet Rasch: Removes {(raterVarianceProp * 100).toFixed(0)}%
+              of variance attributable to rater severity/leniency differences
             </li>
           )}
           <li>
-            ICC validation: {nFollowups} follow-up assessments, expected ICC ={" "}
-            {expectedIcc}, intracluster correlation = {iccClusterCorr}, target
-            threshold = {targetIcc}
+            Intraclass correlation validation: {nFollowups} follow-up
+            assessments, expected = {expectedIcc}, cluster intraclass corr ={" "}
+            {iccClusterCorr}, target threshold = {targetIcc}
           </li>
         </ul>
 
@@ -1267,7 +1278,10 @@ export default function PowerCurves() {
                     Items weighted by information; more precise than
                     equal-weighted sum
                   </li>
-                  <li>Enables DIF testing across countries</li>
+                  <li>
+                    Enables Differential Item Functioning testing across
+                    countries
+                  </li>
                 </>
               )}
               {useMFRM && (
