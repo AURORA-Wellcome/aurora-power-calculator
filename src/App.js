@@ -18,8 +18,8 @@ export default function PowerCurves() {
   const [alpha, setAlpha] = useState(0.025); // BH-adjusted
   const [iccHamd, setIccHamd] = useState(0.04);
   const [iccRetention, setIccRetention] = useState(0.05);
-  const [r2Hamd, setR2Hamd] = useState(0.4);
-  const [r2Retention, setR2Retention] = useState(0.08);
+  const [r2Hamd, setR2Hamd] = useState(0.35);
+  const [r2Retention, setR2Retention] = useState(0.05);
   const [patientsPerCluster, setPatientsPerCluster] = useState(10);
   const [controlAttrition, setControlAttrition] = useState(0.3);
   const [treatmentRatio, setTreatmentRatio] = useState(3); // treatment:control ratio (e.g., 3 means 3:1)
@@ -30,6 +30,12 @@ export default function PowerCurves() {
   const [sumScoreReliability, setSumScoreReliability] = useState(0.86);
   const [raschReliability, setRaschReliability] = useState(0.91);
   const [raterVarianceProp, setRaterVarianceProp] = useState(0.07); // proportion of variance due to raters
+
+  // ICC validation parameters (treatment arm only)
+  const [targetIcc, setTargetIcc] = useState(0.75); // threshold for "good" reliability
+  const [expectedIcc, setExpectedIcc] = useState(0.8); // expected ICC based on preliminary data
+  const [iccClusterCorr, setIccClusterCorr] = useState(0.03); // intracluster correlation for ICC estimation
+  const [nFollowups, setNFollowups] = useState(4); // number of follow-up assessments
 
   // Z-scores
   const zAlpha = useMemo(() => {
@@ -185,12 +191,62 @@ export default function PowerCurves() {
     };
   };
 
+  // Calculate ICC validation precision (treatment arm only)
+  // Tests whether AI-clinician agreement exceeds threshold for good reliability (ICC>0.75)
+  const calcIccValidation = (totalN) => {
+    const nClusters = Math.round(totalN / patientsPerCluster);
+    const treatmentProportion = treatmentRatio / (treatmentRatio + 1);
+    const nTreatmentClusters = Math.round(nClusters * treatmentProportion);
+
+    // Treatment arm patients after attrition
+    const nTreatmentPatients =
+      nTreatmentClusters * patientsPerCluster * (1 - controlAttrition);
+
+    // Total observations = patients × follow-up assessments
+    const nObservations = nTreatmentPatients * nFollowups;
+
+    // Design effect for clustering in ICC estimation
+    const avgObsPerCluster = nObservations / nTreatmentClusters;
+    const designEffect = 1 + (avgObsPerCluster - 1) * iccClusterCorr;
+
+    // Effective sample size
+    const nEffective = nObservations / designEffect;
+
+    // Standard error of ICC estimate using Fisher's z transformation
+    // SE(z) ≈ 1/sqrt(n-3), then convert back to ICC scale
+    // For ICC, SE ≈ (1-ICC²) * sqrt(2/(n-1)) approximately
+    const seIcc =
+      (1 - expectedIcc * expectedIcc) * Math.sqrt(2 / (nEffective - 1));
+
+    // 95% CI half-width
+    const ciHalfWidth = 1.96 * seIcc;
+
+    // Lower bound of 95% CI
+    const lowerBound = expectedIcc - ciHalfWidth;
+
+    // Can we rule out ICC < 0.75?
+    const canRuleOutPoor = lowerBound > targetIcc;
+
+    return {
+      nTreatmentPatients: Math.round(nTreatmentPatients),
+      nTreatmentClusters: nTreatmentClusters,
+      nObservations: Math.round(nObservations),
+      nEffective: Math.round(nEffective),
+      seIcc: seIcc,
+      ciHalfWidth: ciHalfWidth,
+      lowerBound: lowerBound,
+      upperBound: expectedIcc + ciHalfWidth,
+      canRuleOutPoor: canRuleOutPoor,
+    };
+  };
+
   // Generate data for curves
   const powerData = useMemo(() => {
     const data = [];
     for (let n = 400; n <= 1300; n += 50) {
       const hamd = calcHamdMDE(n);
       const retention = calcRetentionMDE(n);
+      const iccVal = calcIccValidation(n);
       data.push({
         n: n,
         clusters: hamd.nClusters,
@@ -199,6 +255,8 @@ export default function PowerCurves() {
         hamdD: hamd.effectSize,
         retentionMDE: retention.mde,
         retentionTreatment: retention.treatmentRate,
+        iccCiWidth: iccVal.ciHalfWidth * 2, // full CI width
+        iccLowerBound: iccVal.lowerBound,
       });
     }
     return data;
@@ -216,12 +274,16 @@ export default function PowerCurves() {
     measurementVarianceMultiplier,
     zAlpha,
     zBeta,
+    expectedIcc,
+    iccClusterCorr,
+    nFollowups,
   ]);
 
   // Current design values
   const currentN = 1000;
   const currentHamd = calcHamdMDE(currentN);
   const currentRetention = calcRetentionMDE(currentN);
+  const currentIcc = calcIccValidation(currentN);
 
   // Find sample size for specific MDEs
   const findNForMDE = (targetMDE, calcFunc, field) => {
@@ -250,7 +312,7 @@ export default function PowerCurves() {
         <h2 className="font-semibold mb-3 text-sm md:text-base">
           Current Design (N=1,000)
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-4 text-xs md:text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs md:text-sm">
           <div className="bg-blue-50 p-2 md:p-3 rounded">
             <div className="text-gray-500 text-xs">HAM-D MDE</div>
             <div className="text-lg md:text-xl font-bold text-blue-700">
@@ -298,7 +360,7 @@ export default function PowerCurves() {
             </div>
           </div>
           <div
-            className={`p-2 md:p-3 rounded col-span-2 sm:col-span-1 ${useRasch || useMFRM ? "bg-green-50" : "bg-gray-50"}`}
+            className={`p-2 md:p-3 rounded ${useRasch || useMFRM ? "bg-green-50" : "bg-gray-50"}`}
           >
             <div className="text-gray-500 text-xs">Measurement</div>
             <div className="text-sm font-bold text-gray-700">
@@ -315,6 +377,19 @@ export default function PowerCurves() {
                 -{currentHamd.varianceReduction?.toFixed(1)}% variance
               </div>
             )}
+          </div>
+          <div
+            className={`p-2 md:p-3 rounded ${currentIcc.canRuleOutPoor ? "bg-teal-50" : "bg-red-50"}`}
+          >
+            <div className="text-gray-500 text-xs">ICC Precision</div>
+            <div
+              className={`text-lg md:text-xl font-bold ${currentIcc.canRuleOutPoor ? "text-teal-700" : "text-red-700"}`}
+            >
+              ±{currentIcc.ciHalfWidth.toFixed(3)}
+            </div>
+            <div className="text-gray-500 text-xs">
+              {currentIcc.nObservations} obs (tx only)
+            </div>
           </div>
         </div>
       </div>
@@ -805,6 +880,111 @@ export default function PowerCurves() {
         </div>
       </div>
 
+      {/* ICC Validation Chart */}
+      <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
+        <h2 className="font-semibold mb-1 text-sm md:text-base">
+          ICC Validation (Treatment Arm Only)
+        </h2>
+        <p className="text-xs text-gray-500 mb-2 md:mb-3">
+          95% CI precision for AURORA-clinician agreement (target: rule out ICC{" "}
+          {"<"} {targetIcc})
+        </p>
+        <ResponsiveContainer
+          width="100%"
+          height={250}
+          className="md:!h-[300px]"
+        >
+          <ComposedChart
+            data={powerData}
+            margin={{ bottom: 15, left: 0, right: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="n"
+              ticks={[400, 600, 800, 1000, 1200]}
+              label={{
+                value: "Total N (patients)",
+                position: "bottom",
+                offset: 0,
+              }}
+            />
+            <YAxis
+              label={{
+                value: "95% CI half-width (±)",
+                angle: -90,
+                position: "insideLeft",
+                style: { textAnchor: "middle" },
+              }}
+              domain={[0, 0.08]}
+            />
+            <Tooltip
+              formatter={(value, name) => {
+                if (name === "iccCiWidth")
+                  return [(value / 2).toFixed(3), "CI half-width (±)"];
+                return [value, name];
+              }}
+              labelFormatter={(n) => {
+                const iccVal = calcIccValidation(n);
+                return `N=${n}: ${iccVal.nObservations} obs, CI: ${iccVal.lowerBound.toFixed(2)}-${iccVal.upperBound.toFixed(2)}`;
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey={() => 0.05}
+              fill="#d1fae5"
+              stroke="none"
+              fillOpacity={0.5}
+              legendType="none"
+              tooltipType="none"
+            />
+            <Line
+              type="monotone"
+              dataKey={(d) => d.iccCiWidth / 2}
+              stroke="#0d9488"
+              strokeWidth={2}
+              dot={false}
+              name="CI half-width"
+            />
+            <ReferenceLine x={1000} stroke="#666" strokeDasharray="5 5" />
+            <ReferenceLine
+              y={expectedIcc - targetIcc}
+              stroke="#ef4444"
+              strokeDasharray="3 3"
+              label={{
+                value: `±${(expectedIcc - targetIcc).toFixed(2)} (rule out <${targetIcc})`,
+                position: "right",
+                fill: "#ef4444",
+                fontSize: 10,
+              }}
+            />
+            <ReferenceLine
+              y={0.03}
+              stroke="#10b981"
+              strokeDasharray="3 3"
+              label={{
+                value: "±0.03",
+                position: "right",
+                fill: "#10b981",
+                fontSize: 11,
+              }}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+        <div className="text-xs md:text-sm text-gray-600 mt-2">
+          <span className="inline-block w-3 h-3 bg-green-200 mr-1"></span>
+          High precision zone (±0.03-0.05) | Expected ICC: {expectedIcc} |
+          {currentIcc.canRuleOutPoor ? (
+            <span className="text-teal-600 font-medium ml-1">
+              Can rule out ICC {"<"} {targetIcc}
+            </span>
+          ) : (
+            <span className="text-red-600 font-medium ml-1">
+              Cannot rule out ICC {"<"} {targetIcc}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Sample Size Table */}
       <div className="bg-white rounded-lg shadow p-3 md:p-4 mb-4 md:mb-6">
         <h2 className="font-semibold mb-3 text-sm md:text-base">
@@ -829,6 +1009,9 @@ export default function PowerCurves() {
                 <th className="text-left p-1.5 md:p-2 hidden sm:table-cell">
                   Tx Attrition
                 </th>
+                <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
+                  ICC ±
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -836,6 +1019,7 @@ export default function PowerCurves() {
                 (n) => {
                   const hamd = calcHamdMDE(n);
                   const retention = calcRetentionMDE(n);
+                  const iccVal = calcIccValidation(n);
                   const isCurrentDesign = n === 1000;
                   return (
                     <tr
@@ -860,6 +1044,11 @@ export default function PowerCurves() {
                       </td>
                       <td className="p-1.5 md:p-2 hidden sm:table-cell">
                         {retention.treatmentRate.toFixed(1)}%
+                      </td>
+                      <td
+                        className={`p-1.5 md:p-2 hidden md:table-cell ${iccVal.canRuleOutPoor ? "text-teal-600" : "text-red-600"}`}
+                      >
+                        {iccVal.ciHalfWidth.toFixed(3)}
                       </td>
                     </tr>
                   );
@@ -983,6 +1172,11 @@ export default function PowerCurves() {
               attributable to rater severity/leniency differences
             </li>
           )}
+          <li>
+            ICC validation: {nFollowups} follow-up assessments, expected ICC ={" "}
+            {expectedIcc}, intracluster correlation = {iccClusterCorr}, target
+            threshold = {targetIcc}
+          </li>
         </ul>
 
         {(useRasch || useMFRM) && (
