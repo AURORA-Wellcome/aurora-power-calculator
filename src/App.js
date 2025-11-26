@@ -94,6 +94,9 @@ export default function PowerCurves() {
     initial.survivalEfficiency,
   );
 
+  // R code section visibility
+  const [showRCode, setShowRCode] = useState(false);
+
   // Save settings to localStorage whenever they change
   useEffect(() => {
     const settings = {
@@ -1269,6 +1272,159 @@ export default function PowerCurves() {
           <p className="text-xs text-gray-500 mt-2">
             Gray column shows MDE with traditional sum scoring for comparison
           </p>
+        )}
+      </div>
+
+      {/* R Code for Verification */}
+      <div className="bg-white rounded-lg shadow mb-4 md:mb-6">
+        <button
+          onClick={() => setShowRCode(!showRCode)}
+          className="w-full p-3 md:p-4 text-left flex justify-between items-center hover:bg-gray-50"
+        >
+          <h2 className="font-semibold text-sm md:text-base">
+            R Code for Verification
+          </h2>
+          <span className="text-gray-500">{showRCode ? "−" : "+"}</span>
+        </button>
+        {showRCode && (
+          <div className="p-3 md:p-4 pt-0 border-t">
+            <p className="text-xs text-gray-500 mb-3">
+              R code to reproduce these power calculations. Copy and run in R to
+              verify results.
+            </p>
+            <pre className="bg-gray-900 text-gray-100 p-3 md:p-4 rounded text-xs overflow-x-auto">
+              <code>{`# AURORA Trial Power Calculations
+# Reproduces the minimum detectable effect (MDE) calculations
+
+# ============================================
+# Current parameter values from the calculator
+# ============================================
+
+# Trial design parameters
+total_n <- 1000                        # Total sample size
+patients_per_cluster <- ${patientsPerCluster}
+cluster_size_cv <- ${clusterSizeCV}              # Coefficient of variation in cluster sizes
+treatment_ratio <- ${treatmentRatio}                 # Treatment:Control ratio (${treatmentRatio}:1)
+control_attrition <- ${controlAttrition}            # Expected attrition rate
+
+# Statistical parameters
+power <- ${power}
+alpha <- ${alpha}                      # Two-sided alpha (Benjamini-Hochberg adjusted)
+z_alpha <- qnorm(1 - alpha)            # Z-score for alpha
+z_beta <- qnorm(power)                 # Z-score for power
+
+# HAM-D outcome parameters
+icc_hamd <- ${iccHamd}                   # Intracluster correlation
+r2_hamd <- ${r2Hamd}                     # Variance explained by covariates
+sigma_hamd <- 7                        # HAM-D standard deviation
+
+# Retention outcome parameters
+icc_retention <- ${iccRetention}             # Intracluster correlation
+r2_retention <- ${r2Retention}              # Variance explained by covariates
+survival_efficiency <- ${survivalEfficiency}           # Efficiency gain from survival analysis
+
+# ============================================
+# HAM-D MDE Calculation
+# ============================================
+
+calc_hamd_mde <- function(total_n) {
+  # Calculate cluster allocation
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+  n_control_clusters <- n_clusters - n_treatment_clusters
+
+  # Patients after attrition
+  n_treatment <- n_treatment_clusters * patients_per_cluster * (1 - control_attrition)
+  n_control <- n_control_clusters * patients_per_cluster * (1 - control_attrition)
+
+  # Harmonic mean of completers
+  n_harmonic <- (2 * n_treatment * n_control) / (n_treatment + n_control)
+
+  # Variance calculations
+  sigma2 <- sigma_hamd^2
+  sigma2_adj <- sigma2 * (1 - r2_hamd)
+
+  # Design effect for clustering (adjusted for unequal cluster sizes)
+  cluster_size <- patients_per_cluster * (1 - control_attrition)
+  design_effect <- (1 + (cluster_size - 1) * icc_hamd) * (1 + cluster_size_cv^2)
+
+  # IPCW variance inflation factor
+  ipcw_vif <- 1.2
+
+  # Repeated measures efficiency (4 timepoints, r ~ 0.5)
+  repeated_measures_gain <- 1.43
+
+  # Net variance
+  net_variance <- (sigma2_adj * design_effect * ipcw_vif) / repeated_measures_gain
+
+  # MDE
+  mde <- (z_alpha + z_beta) * sqrt(2 * net_variance / n_harmonic)
+
+  return(list(
+    mde = mde,
+    effect_size = mde / sigma_hamd,  # Cohen's d
+    n_clusters = n_clusters,
+    n_completers = round(n_treatment + n_control)
+  ))
+}
+
+# ============================================
+# Retention MDE Calculation
+# ============================================
+
+calc_retention_mde <- function(total_n) {
+  # Calculate cluster allocation
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+  n_control_clusters <- n_clusters - n_treatment_clusters
+
+  n_treatment <- n_treatment_clusters * patients_per_cluster
+  n_control <- n_control_clusters * patients_per_cluster
+
+  # Design effect (adjusted for unequal cluster sizes)
+  design_effect <- (1 + (patients_per_cluster - 1) * icc_retention) * (1 + cluster_size_cv^2)
+
+  p0 <- control_attrition
+
+  # Base SE for proportion difference
+  base_se <- sqrt(p0 * (1 - p0) * (1/n_treatment + 1/n_control))
+
+  # Apply clustering, covariate adjustment, and survival efficiency
+  clustered_se <- base_se * sqrt(design_effect)
+  adjusted_se <- clustered_se * sqrt(1 - r2_retention)
+  survival_se <- adjusted_se / sqrt(survival_efficiency)
+
+  mde <- (z_alpha + z_beta) * survival_se
+
+  return(list(
+    mde_pp = mde * 100,  # Percentage points
+    control_rate = p0 * 100,
+    treatment_rate = (p0 - mde) * 100
+  ))
+}
+
+# ============================================
+# Run calculations
+# ============================================
+
+hamd_result <- calc_hamd_mde(total_n)
+retention_result <- calc_retention_mde(total_n)
+
+cat("HAM-D Results (N =", total_n, "):\\n")
+cat("  MDE:", round(hamd_result$mde, 2), "points\\n")
+cat("  Cohen's d:", round(hamd_result$effect_size, 2), "\\n")
+cat("  Clusters:", hamd_result$n_clusters, "\\n")
+cat("  Completers:", hamd_result$n_completers, "\\n\\n")
+
+cat("Retention Results (N =", total_n, "):\\n")
+cat("  MDE:", round(retention_result$mde_pp, 1), "percentage points\\n")
+cat("  Treatment rate:", round(retention_result$treatment_rate, 1), "%\\n")
+cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
+`}</code>
+            </pre>
+          </div>
         )}
       </div>
     </div>
