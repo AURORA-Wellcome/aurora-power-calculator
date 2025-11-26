@@ -1003,7 +1003,7 @@ export default function PowerCurves() {
               }}
               labelFormatter={(n) => {
                 const iccVal = calcIccValidation(n);
-                return `N=${n}: ${iccVal.nObservations} obs, CI: ${iccVal.lowerBound.toFixed(2)}-${iccVal.upperBound.toFixed(2)}`;
+                return `N=${n}: ${iccVal.nObservations} obs, CI: ${iccVal.lowerBound.toFixed(3)}-${iccVal.upperBound.toFixed(3)}`;
               }}
             />
             <Area
