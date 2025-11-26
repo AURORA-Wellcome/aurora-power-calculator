@@ -11,7 +11,7 @@ Interactive web application for exploring minimum detectable effects (MDEs) and 
 - **Visualization**: Power curves showing MDE across sample sizes with clinically meaningful thresholds
 - **Persistent Settings**: User preferences are saved locally and restored on return visits
 
-## Getting Started
+## Run Locally
 
 ### Prerequisites
 
