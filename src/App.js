@@ -548,7 +548,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Cluster Size CV
+              Cluster Size Variation
             </label>
             <select
               value={clusterSizeCV}
