@@ -445,7 +445,7 @@ export default function PowerCurves() {
 
   // R code for WebR execution (without template literal escaping issues)
   const rCodeForExecution = `
-total_n <- 1000
+total_n <- ${currentN}
 patients_per_cluster <- ${patientsPerCluster}
 cluster_size_cv <- ${clusterSizeCV}
 treatment_ratio <- ${treatmentRatio}
@@ -1451,7 +1451,7 @@ cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
 # ============================================
 
 # Trial design parameters
-total_n <- 1000                        # Total sample size
+total_n <- ${currentN}                        # Total sample size
 patients_per_cluster <- ${patientsPerCluster}
 cluster_size_cv <- ${clusterSizeCV}              # Coefficient of variation in cluster sizes
 treatment_ratio <- ${treatmentRatio}                 # Treatment:Control ratio (${treatmentRatio}:1)
