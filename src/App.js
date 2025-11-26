@@ -485,6 +485,12 @@ icc_retention <- ${iccRetention}
 r2_retention <- ${r2Retention}
 survival_efficiency <- ${survivalEfficiency}
 
+# ICC validation parameters
+target_icc <- ${targetIcc}
+expected_icc <- ${expectedIcc}
+icc_cluster_corr <- ${iccClusterCorr}
+n_followups <- ${nFollowups}
+
 calc_hamd_mde <- function(total_n) {
   n_clusters <- round(total_n / patients_per_cluster)
   treatment_prop <- treatment_ratio / (treatment_ratio + 1)
@@ -521,18 +527,42 @@ calc_retention_mde <- function(total_n) {
   list(mde_pp = mde * 100, control_rate = p0 * 100, treatment_rate = (p0 - mde) * 100)
 }
 
+calc_icc_validation <- function(total_n) {
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+  n_treatment_patients <- n_treatment_clusters * patients_per_cluster * (1 - control_attrition)
+  n_observations <- n_treatment_patients * n_followups
+  avg_obs_per_cluster <- n_observations / n_treatment_clusters
+  design_effect <- 1 + (avg_obs_per_cluster - 1) * icc_cluster_corr
+  n_effective <- n_observations / design_effect
+  se_icc <- (1 - expected_icc^2) * sqrt(2 / (n_effective - 1))
+  ci_half_width <- 1.96 * se_icc
+  lower_bound <- expected_icc - ci_half_width
+  can_rule_out_poor <- lower_bound > target_icc
+  list(n_observations = round(n_observations), ci_half_width = ci_half_width,
+       lower_bound = lower_bound, upper_bound = expected_icc + ci_half_width,
+       can_rule_out_poor = can_rule_out_poor)
+}
+
 hamd_result <- calc_hamd_mde(total_n)
 retention_result <- calc_retention_mde(total_n)
+icc_result <- calc_icc_validation(total_n)
 
-cat("HAM-D Results (N =", total_n, "):\\n")
-cat("  MDE:", round(hamd_result$mde, 2), "points\\n")
-cat("  Cohen's d:", round(hamd_result$effect_size, 2), "\\n")
-cat("  Clusters:", hamd_result$n_clusters, "\\n")
-cat("  Completers:", hamd_result$n_completers, "\\n\\n")
-cat("Retention Results (N =", total_n, "):\\n")
-cat("  MDE:", round(retention_result$mde_pp, 1), "percentage points\\n")
-cat("  Treatment rate:", round(retention_result$treatment_rate, 1), "%\\n")
-cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
+cat(paste0("HAM-D Results (N = ", total_n, "):\\n"))
+cat(paste0("  MDE: ", round(hamd_result$mde, 2), " points\\n"))
+cat(paste0("  Cohen's d: ", round(hamd_result$effect_size, 2), "\\n"))
+cat(paste0("  Clusters: ", hamd_result$n_clusters, "\\n"))
+cat(paste0("  Completers: ", hamd_result$n_completers, "\\n\\n"))
+cat(paste0("Retention Results (N = ", total_n, "):\\n"))
+cat(paste0("  MDE: ", round(retention_result$mde_pp, 1), " percentage points\\n"))
+cat(paste0("  Treatment rate: ", round(retention_result$treatment_rate, 1), "%\\n"))
+cat(paste0("  Control rate: ", round(retention_result$control_rate, 1), "%\\n\\n"))
+cat(paste0("ICC Validation (Treatment Arm):\\n"))
+cat(paste0("  Observations: ", icc_result$n_observations, "\\n"))
+cat(paste0("  95% CI: ", round(icc_result$lower_bound, 3), " - ", round(icc_result$upper_bound, 3), "\\n"))
+cat(paste0("  CI half-width: +/-", round(icc_result$ci_half_width, 3), "\\n"))
+cat(paste0("  Can rule out ICC < ", target_icc, ": ", ifelse(icc_result$can_rule_out_poor, "Yes", "No"), "\\n"))
 `;
 
   return (
@@ -1513,6 +1543,12 @@ icc_retention <- ${iccRetention}             # Intracluster correlation
 r2_retention <- ${r2Retention}              # Variance explained by covariates
 survival_efficiency <- ${survivalEfficiency}           # Efficiency gain from survival analysis
 
+# ICC validation parameters
+target_icc <- ${targetIcc}                 # Threshold for "good" reliability
+expected_icc <- ${expectedIcc}               # Expected ICC based on preliminary data
+icc_cluster_corr <- ${iccClusterCorr}           # Intracluster correlation for ICC estimation
+n_followups <- ${nFollowups}                   # Number of follow-up assessments
+
 # ============================================
 # HAM-D MDE Calculation
 # ============================================
@@ -1596,22 +1632,72 @@ calc_retention_mde <- function(total_n) {
 }
 
 # ============================================
+# ICC Validation Calculation (Treatment Arm)
+# ============================================
+
+calc_icc_validation <- function(total_n) {
+  n_clusters <- round(total_n / patients_per_cluster)
+  treatment_prop <- treatment_ratio / (treatment_ratio + 1)
+  n_treatment_clusters <- round(n_clusters * treatment_prop)
+
+  # Treatment arm patients after attrition
+  n_treatment_patients <- n_treatment_clusters * patients_per_cluster * (1 - control_attrition)
+
+  # Total observations = patients × follow-up assessments
+  n_observations <- n_treatment_patients * n_followups
+
+  # Design effect for clustering in ICC estimation
+  avg_obs_per_cluster <- n_observations / n_treatment_clusters
+  design_effect <- 1 + (avg_obs_per_cluster - 1) * icc_cluster_corr
+
+  # Effective sample size
+  n_effective <- n_observations / design_effect
+
+  # Standard error of ICC estimate
+  se_icc <- (1 - expected_icc^2) * sqrt(2 / (n_effective - 1))
+
+  # 95% CI half-width
+  ci_half_width <- 1.96 * se_icc
+
+  # Lower bound of 95% CI
+  lower_bound <- expected_icc - ci_half_width
+
+  # Can we rule out ICC < target?
+  can_rule_out_poor <- lower_bound > target_icc
+
+  return(list(
+    n_observations = round(n_observations),
+    ci_half_width = ci_half_width,
+    lower_bound = lower_bound,
+    upper_bound = expected_icc + ci_half_width,
+    can_rule_out_poor = can_rule_out_poor
+  ))
+}
+
+# ============================================
 # Run calculations
 # ============================================
 
 hamd_result <- calc_hamd_mde(total_n)
 retention_result <- calc_retention_mde(total_n)
+icc_result <- calc_icc_validation(total_n)
 
-cat("HAM-D Results (N =", total_n, "):\\n")
-cat("  MDE:", round(hamd_result$mde, 2), "points\\n")
-cat("  Cohen's d:", round(hamd_result$effect_size, 2), "\\n")
-cat("  Clusters:", hamd_result$n_clusters, "\\n")
-cat("  Completers:", hamd_result$n_completers, "\\n\\n")
+cat(paste0("HAM-D Results (N = ", total_n, "):\\n"))
+cat(paste0("  MDE: ", round(hamd_result$mde, 2), " points\\n"))
+cat(paste0("  Cohen's d: ", round(hamd_result$effect_size, 2), "\\n"))
+cat(paste0("  Clusters: ", hamd_result$n_clusters, "\\n"))
+cat(paste0("  Completers: ", hamd_result$n_completers, "\\n\\n"))
 
-cat("Retention Results (N =", total_n, "):\\n")
-cat("  MDE:", round(retention_result$mde_pp, 1), "percentage points\\n")
-cat("  Treatment rate:", round(retention_result$treatment_rate, 1), "%\\n")
-cat("  Control rate:", round(retention_result$control_rate, 1), "%\\n")
+cat(paste0("Retention Results (N = ", total_n, "):\\n"))
+cat(paste0("  MDE: ", round(retention_result$mde_pp, 1), " percentage points\\n"))
+cat(paste0("  Treatment rate: ", round(retention_result$treatment_rate, 1), "%\\n"))
+cat(paste0("  Control rate: ", round(retention_result$control_rate, 1), "%\\n\\n"))
+
+cat(paste0("ICC Validation (Treatment Arm):\\n"))
+cat(paste0("  Observations: ", icc_result$n_observations, "\\n"))
+cat(paste0("  95% CI: ", round(icc_result$lower_bound, 3), " - ", round(icc_result$upper_bound, 3), "\\n"))
+cat(paste0("  CI half-width: +/-", round(icc_result$ci_half_width, 3), "\\n"))
+cat(paste0("  Can rule out ICC < ", target_icc, ": ", ifelse(icc_result$can_rule_out_poor, "Yes", "No"), "\\n"))
 `}</code>
             </pre>
           </div>
