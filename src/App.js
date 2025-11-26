@@ -486,7 +486,7 @@ export default function PowerCurves() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-3 md:mt-4">
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              HAM-D Intraclass Corr: {iccHamd}
+              HAM-D Intracluster Corr: {iccHamd}
             </label>
             <input
               type="range"
@@ -514,7 +514,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Retention Intraclass Corr: {iccRetention}
+              Retention Intracluster Corr: {iccRetention}
             </label>
             <input
               type="range"
@@ -721,7 +721,7 @@ export default function PowerCurves() {
           </div>
           <div>
             <label className="block text-xs md:text-sm text-gray-600 mb-1">
-              Cluster Intraclass Corr: {iccClusterCorr}
+              Cluster Intracluster Corr: {iccClusterCorr}
             </label>
             <input
               type="range"
