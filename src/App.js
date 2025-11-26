@@ -830,35 +830,39 @@ export default function PowerCurves() {
               </tr>
             </thead>
             <tbody>
-              {[400, 500, 600, 750, 800, 1000, 1100, 1200, 1300].map((n) => {
-                const hamd = calcHamdMDE(n);
-                const retention = calcRetentionMDE(n);
-                const isCurrentDesign = n === 1000;
-                return (
-                  <tr
-                    key={n}
-                    className={`border-b ${isCurrentDesign ? "bg-blue-50 font-semibold" : ""}`}
-                  >
-                    <td className="p-1.5 md:p-2">{n}</td>
-                    <td className="p-1.5 md:p-2 hidden sm:table-cell">
-                      {hamd.nClusters}
-                    </td>
-                    <td className="p-1.5 md:p-2">{hamd.mde.toFixed(2)}</td>
-                    {(useRasch || useMFRM) && (
-                      <td className="p-1.5 md:p-2 text-gray-400 hidden md:table-cell">
-                        {hamd.baselineMDE.toFixed(2)}
+              {[400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300].map(
+                (n) => {
+                  const hamd = calcHamdMDE(n);
+                  const retention = calcRetentionMDE(n);
+                  const isCurrentDesign = n === 1000;
+                  return (
+                    <tr
+                      key={n}
+                      className={`border-b ${isCurrentDesign ? "bg-blue-50 font-semibold" : ""}`}
+                    >
+                      <td className="p-1.5 md:p-2">{n}</td>
+                      <td className="p-1.5 md:p-2 hidden sm:table-cell">
+                        {hamd.nClusters}
                       </td>
-                    )}
-                    <td className="p-1.5 md:p-2">
-                      {hamd.effectSize.toFixed(2)}
-                    </td>
-                    <td className="p-1.5 md:p-2">{retention.mde.toFixed(1)}</td>
-                    <td className="p-1.5 md:p-2 hidden sm:table-cell">
-                      {retention.treatmentRate.toFixed(1)}%
-                    </td>
-                  </tr>
-                );
-              })}
+                      <td className="p-1.5 md:p-2">{hamd.mde.toFixed(2)}</td>
+                      {(useRasch || useMFRM) && (
+                        <td className="p-1.5 md:p-2 text-gray-400 hidden md:table-cell">
+                          {hamd.baselineMDE.toFixed(2)}
+                        </td>
+                      )}
+                      <td className="p-1.5 md:p-2">
+                        {hamd.effectSize.toFixed(2)}
+                      </td>
+                      <td className="p-1.5 md:p-2">
+                        {retention.mde.toFixed(1)}
+                      </td>
+                      <td className="p-1.5 md:p-2 hidden sm:table-cell">
+                        {retention.treatmentRate.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                },
+              )}
             </tbody>
           </table>
         </div>
