@@ -24,9 +24,10 @@ export default function PowerCurves() {
   const [controlAttrition, setControlAttrition] = useState(0.3);
   const [treatmentRatio, setTreatmentRatio] = useState(3); // treatment:control ratio (e.g., 3 means 3:1)
 
-  // Rasch/MFRM measurement model parameters
-  const [useRasch, setUseRasch] = useState(false);
-  const [useMFRM, setUseMFRM] = useState(false);
+  // Measurement model: "sum" | "rasch" | "mfrm"
+  const [measurementModel, setMeasurementModel] = useState("sum");
+  const useRasch = measurementModel === "rasch" || measurementModel === "mfrm";
+  const useMFRM = measurementModel === "mfrm";
   const [sumScoreReliability, setSumScoreReliability] = useState(0.86);
   const [raschReliability, setRaschReliability] = useState(0.91);
   const [raterVarianceProp, setRaterVarianceProp] = useState(0.07); // proportion of variance due to raters
@@ -570,29 +571,47 @@ export default function PowerCurves() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 md:mb-4">
           <div className="flex items-center">
             <input
-              type="checkbox"
-              id="useRasch"
-              checked={useRasch}
-              onChange={(e) => setUseRasch(e.target.checked)}
+              type="radio"
+              id="modelSum"
+              name="measurementModel"
+              value="sum"
+              checked={measurementModel === "sum"}
+              onChange={(e) => setMeasurementModel(e.target.value)}
               className="mr-2 h-4 w-4"
             />
-            <label htmlFor="useRasch" className="text-xs md:text-sm">
+            <label htmlFor="modelSum" className="text-xs md:text-sm">
+              Sum score
+            </label>
+          </div>
+          <div className="flex items-center">
+            <input
+              type="radio"
+              id="modelRasch"
+              name="measurementModel"
+              value="rasch"
+              checked={measurementModel === "rasch"}
+              onChange={(e) => setMeasurementModel(e.target.value)}
+              className="mr-2 h-4 w-4"
+            />
+            <label htmlFor="modelRasch" className="text-xs md:text-sm">
               Rasch Partial Credit Model
             </label>
           </div>
           <div className="flex items-center">
             <input
-              type="checkbox"
-              id="useMFRM"
-              checked={useMFRM}
-              onChange={(e) => setUseMFRM(e.target.checked)}
+              type="radio"
+              id="modelMFRM"
+              name="measurementModel"
+              value="mfrm"
+              checked={measurementModel === "mfrm"}
+              onChange={(e) => setMeasurementModel(e.target.value)}
               className="mr-2 h-4 w-4"
             />
-            <label htmlFor="useMFRM" className="text-xs md:text-sm">
-              Multi-Facet Rasch Rater Adj
+            <label htmlFor="modelMFRM" className="text-xs md:text-sm">
+              Multi-Facet Rasch Model
             </label>
           </div>
-          <div className="col-span-2 text-xs md:text-sm text-gray-600">
+          <div className="text-xs md:text-sm text-gray-600">
             {(useRasch || useMFRM) && (
               <span className="text-green-600 font-medium">
                 -{currentHamd.varianceReduction?.toFixed(1)}% var → MDE:{" "}
