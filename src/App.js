@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -13,31 +13,136 @@ import {
   ComposedChart,
 } from "recharts";
 
+const STORAGE_KEY = "aurora-power-calculator-settings";
+
+const defaults = {
+  power: 0.8,
+  alpha: 0.025,
+  iccHamd: 0.04,
+  iccRetention: 0.05,
+  r2Hamd: 0.35,
+  r2Retention: 0.05,
+  patientsPerCluster: 10,
+  clusterSizeCV: 0,
+  controlAttrition: 0.3,
+  treatmentRatio: 3,
+  measurementModel: "sum",
+  sumScoreReliability: 0.86,
+  raschReliability: 0.91,
+  raterVarianceProp: 0.07,
+  targetIcc: 0.75,
+  expectedIcc: 0.8,
+  iccClusterCorr: 0.03,
+  nFollowups: 4,
+  survivalEfficiency: 4.0,
+};
+
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      return { ...defaults, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return defaults;
+}
+
 export default function PowerCurves() {
-  const [power, setPower] = useState(0.8);
-  const [alpha, setAlpha] = useState(0.025); // BH-adjusted
-  const [iccHamd, setIccHamd] = useState(0.04);
-  const [iccRetention, setIccRetention] = useState(0.05);
-  const [r2Hamd, setR2Hamd] = useState(0.35);
-  const [r2Retention, setR2Retention] = useState(0.05);
-  const [patientsPerCluster, setPatientsPerCluster] = useState(10);
-  const [clusterSizeCV, setClusterSizeCV] = useState(0); // coefficient of variation in cluster sizes
-  const [controlAttrition, setControlAttrition] = useState(0.3);
-  const [treatmentRatio, setTreatmentRatio] = useState(3); // treatment:control ratio (e.g., 3 means 3:1)
+  const initial = loadSettings();
+
+  const [power, setPower] = useState(initial.power);
+  const [alpha, setAlpha] = useState(initial.alpha);
+  const [iccHamd, setIccHamd] = useState(initial.iccHamd);
+  const [iccRetention, setIccRetention] = useState(initial.iccRetention);
+  const [r2Hamd, setR2Hamd] = useState(initial.r2Hamd);
+  const [r2Retention, setR2Retention] = useState(initial.r2Retention);
+  const [patientsPerCluster, setPatientsPerCluster] = useState(
+    initial.patientsPerCluster,
+  );
+  const [clusterSizeCV, setClusterSizeCV] = useState(initial.clusterSizeCV);
+  const [controlAttrition, setControlAttrition] = useState(
+    initial.controlAttrition,
+  );
+  const [treatmentRatio, setTreatmentRatio] = useState(initial.treatmentRatio);
 
   // Measurement model: "sum" | "rasch" | "mfrm"
-  const [measurementModel, setMeasurementModel] = useState("sum");
+  const [measurementModel, setMeasurementModel] = useState(
+    initial.measurementModel,
+  );
   const useRasch = measurementModel === "rasch" || measurementModel === "mfrm";
   const useMFRM = measurementModel === "mfrm";
-  const [sumScoreReliability, setSumScoreReliability] = useState(0.86);
-  const [raschReliability, setRaschReliability] = useState(0.91);
-  const [raterVarianceProp, setRaterVarianceProp] = useState(0.07); // proportion of variance due to raters
+  const [sumScoreReliability, setSumScoreReliability] = useState(
+    initial.sumScoreReliability,
+  );
+  const [raschReliability, setRaschReliability] = useState(
+    initial.raschReliability,
+  );
+  const [raterVarianceProp, setRaterVarianceProp] = useState(
+    initial.raterVarianceProp,
+  );
 
   // ICC validation parameters (treatment arm only)
-  const [targetIcc, setTargetIcc] = useState(0.75); // threshold for "good" reliability
-  const [expectedIcc, setExpectedIcc] = useState(0.8); // expected ICC based on preliminary data
-  const [iccClusterCorr, setIccClusterCorr] = useState(0.03); // intracluster correlation for ICC estimation
-  const [nFollowups, setNFollowups] = useState(4); // number of follow-up assessments
+  const [targetIcc, setTargetIcc] = useState(initial.targetIcc);
+  const [expectedIcc, setExpectedIcc] = useState(initial.expectedIcc);
+  const [iccClusterCorr, setIccClusterCorr] = useState(initial.iccClusterCorr);
+  const [nFollowups, setNFollowups] = useState(initial.nFollowups);
+
+  // Survival efficiency
+  const [survivalEfficiency, setSurvivalEfficiency] = useState(
+    initial.survivalEfficiency,
+  );
+
+  // Save settings to localStorage whenever they change
+  useEffect(() => {
+    const settings = {
+      power,
+      alpha,
+      iccHamd,
+      iccRetention,
+      r2Hamd,
+      r2Retention,
+      patientsPerCluster,
+      clusterSizeCV,
+      controlAttrition,
+      treatmentRatio,
+      measurementModel,
+      sumScoreReliability,
+      raschReliability,
+      raterVarianceProp,
+      targetIcc,
+      expectedIcc,
+      iccClusterCorr,
+      nFollowups,
+      survivalEfficiency,
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      // Ignore errors
+    }
+  }, [
+    power,
+    alpha,
+    iccHamd,
+    iccRetention,
+    r2Hamd,
+    r2Retention,
+    patientsPerCluster,
+    clusterSizeCV,
+    controlAttrition,
+    treatmentRatio,
+    measurementModel,
+    sumScoreReliability,
+    raschReliability,
+    raterVarianceProp,
+    targetIcc,
+    expectedIcc,
+    iccClusterCorr,
+    nFollowups,
+    survivalEfficiency,
+  ]);
 
   // Z-scores
   const zAlpha = useMemo(() => {
@@ -154,8 +259,6 @@ export default function PowerCurves() {
   };
 
   // Calculate MDE for retention given total N
-  const [survivalEfficiency, setSurvivalEfficiency] = useState(4.0);
-
   const calcRetentionMDE = (totalN) => {
     const nClusters = Math.round(totalN / patientsPerCluster);
     const treatmentProportion = treatmentRatio / (treatmentRatio + 1);
