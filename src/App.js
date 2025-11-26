@@ -148,15 +148,14 @@ export default function PowerCurves() {
       setWebRStatus("running");
       setWebROutput("Running R code...");
 
-      // Capture output
+      // Capture output and collapse to single string
       const result = await webR.evalRString(`
-        capture.output({
+        paste(capture.output({
           ${rCode}
-        }, type = "output")
+        }, type = "output"), collapse = "\n")
       `);
 
-      // Parse the result - it comes as a string with escaped newlines
-      const output = result.replace(/\\n/g, "\n");
+      const output = result;
       setWebROutput(output);
       setWebRStatus("ready");
     } catch (error) {
