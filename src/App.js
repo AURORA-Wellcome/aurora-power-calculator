@@ -22,6 +22,7 @@ export default function PowerCurves() {
   const [r2Retention, setR2Retention] = useState(0.08);
   const [patientsPerCluster, setPatientsPerCluster] = useState(10);
   const [controlAttrition, setControlAttrition] = useState(0.3);
+  const [treatmentRatio, setTreatmentRatio] = useState(3); // treatment:control ratio (e.g., 3 means 3:1)
 
   // Rasch/MFRM measurement model parameters
   const [useRasch, setUseRasch] = useState(false);
@@ -88,7 +89,8 @@ export default function PowerCurves() {
   // Calculate MDE for HAM-D given total N
   const calcHamdMDE = (totalN) => {
     const nClusters = Math.round(totalN / patientsPerCluster);
-    const nTreatmentClusters = Math.round(nClusters * 0.75);
+    const treatmentProportion = treatmentRatio / (treatmentRatio + 1);
+    const nTreatmentClusters = Math.round(nClusters * treatmentProportion);
     const nControlClusters = nClusters - nTreatmentClusters;
 
     // Patients after 30% attrition
@@ -135,6 +137,8 @@ export default function PowerCurves() {
       baselineMDE: baselineMDE,
       effectSize: mde / 7, // Cohen's d
       nClusters: nClusters,
+      nTreatmentClusters: nTreatmentClusters,
+      nControlClusters: nControlClusters,
       nCompleters: Math.round(nTreatmentPatients + nControlPatients),
       varianceReduction: (1 - measurementVarianceMultiplier) * 100,
     };
@@ -145,7 +149,8 @@ export default function PowerCurves() {
 
   const calcRetentionMDE = (totalN) => {
     const nClusters = Math.round(totalN / patientsPerCluster);
-    const nTreatmentClusters = Math.round(nClusters * 0.75);
+    const treatmentProportion = treatmentRatio / (treatmentRatio + 1);
+    const nTreatmentClusters = Math.round(nClusters * treatmentProportion);
     const nControlClusters = nClusters - nTreatmentClusters;
 
     const nTreatment = nTreatmentClusters * patientsPerCluster;
@@ -206,6 +211,7 @@ export default function PowerCurves() {
     r2Retention,
     patientsPerCluster,
     controlAttrition,
+    treatmentRatio,
     survivalEfficiency,
     measurementVarianceMultiplier,
     zAlpha,
@@ -277,7 +283,10 @@ export default function PowerCurves() {
             <div className="text-lg md:text-xl font-bold text-purple-700">
               {currentHamd.nClusters}
             </div>
-            <div className="text-gray-500 text-xs">75 tx / 25 ctrl</div>
+            <div className="text-gray-500 text-xs">
+              {currentHamd.nTreatmentClusters} tx /{" "}
+              {currentHamd.nControlClusters} ctrl
+            </div>
           </div>
           <div className="bg-orange-50 p-2 md:p-3 rounded">
             <div className="text-gray-500 text-xs">Completers</div>
@@ -374,6 +383,21 @@ export default function PowerCurves() {
               <option value={0.3}>30%</option>
               <option value={0.35}>35%</option>
               <option value={0.4}>40%</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Tx:Ctrl Ratio
+            </label>
+            <select
+              value={treatmentRatio}
+              onChange={(e) => setTreatmentRatio(parseInt(e.target.value))}
+              className="w-full border rounded p-1.5 md:p-2 text-sm"
+            >
+              <option value={1}>1:1</option>
+              <option value={2}>2:1</option>
+              <option value={3}>3:1</option>
+              <option value={4}>4:1</option>
             </select>
           </div>
         </div>
@@ -932,7 +956,7 @@ export default function PowerCurves() {
       <div className="mt-6 text-xs text-gray-500">
         <h3 className="font-medium mb-1">Assumptions:</h3>
         <ul className="list-disc list-inside">
-          <li>3:1 treatment:control cluster allocation</li>
+          <li>{treatmentRatio}:1 treatment:control cluster allocation</li>
           <li>HAM-D SD = 7, repeated measures at 4 timepoints (r≈0.5)</li>
           <li>IPCW variance inflation factor = 1.20</li>
           <li>
