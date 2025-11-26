@@ -21,6 +21,7 @@ export default function PowerCurves() {
   const [r2Hamd, setR2Hamd] = useState(0.35);
   const [r2Retention, setR2Retention] = useState(0.05);
   const [patientsPerCluster, setPatientsPerCluster] = useState(10);
+  const [clusterSizeCV, setClusterSizeCV] = useState(0); // coefficient of variation in cluster sizes
   const [controlAttrition, setControlAttrition] = useState(0.3);
   const [treatmentRatio, setTreatmentRatio] = useState(3); // treatment:control ratio (e.g., 3 means 3:1)
 
@@ -115,9 +116,10 @@ export default function PowerCurves() {
     const sigma2 = 49; // SD = 7
     const sigma2Adj = sigma2 * (1 - r2Hamd);
 
-    // Design effect for clustering
+    // Design effect for clustering (adjusted for unequal cluster sizes)
     const clusterSize = patientsPerCluster * (1 - controlAttrition); // after attrition
-    const designEffect = 1 + (clusterSize - 1) * iccHamd;
+    const designEffect =
+      (1 + (clusterSize - 1) * iccHamd) * (1 + clusterSizeCV * clusterSizeCV);
 
     // Inverse Probability of Censoring Weights variance inflation
     const ipcwVIF = 1.2;
@@ -163,8 +165,10 @@ export default function PowerCurves() {
     const nTreatment = nTreatmentClusters * patientsPerCluster;
     const nControl = nControlClusters * patientsPerCluster;
 
-    // Design effect for clustering
-    const designEffect = 1 + (patientsPerCluster - 1) * iccRetention;
+    // Design effect for clustering (adjusted for unequal cluster sizes)
+    const designEffect =
+      (1 + (patientsPerCluster - 1) * iccRetention) *
+      (1 + clusterSizeCV * clusterSizeCV);
 
     const p0 = controlAttrition;
 
@@ -269,6 +273,7 @@ export default function PowerCurves() {
     r2Hamd,
     r2Retention,
     patientsPerCluster,
+    clusterSizeCV,
     controlAttrition,
     treatmentRatio,
     survivalEfficiency,
@@ -436,6 +441,21 @@ export default function PowerCurves() {
               <option value={10}>10</option>
               <option value={12}>12</option>
               <option value={15}>15</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs md:text-sm text-gray-600 mb-1">
+              Cluster Size CV
+            </label>
+            <select
+              value={clusterSizeCV}
+              onChange={(e) => setClusterSizeCV(parseFloat(e.target.value))}
+              className="w-full border rounded p-1.5 md:p-2 text-sm"
+            >
+              <option value={0}>0 (equal)</option>
+              <option value={0.2}>0.2 (low)</option>
+              <option value={0.4}>0.4 (moderate)</option>
+              <option value={0.6}>0.6 (high)</option>
             </select>
           </div>
           <div>
