@@ -293,6 +293,9 @@ export default function PowerCurves() {
   // question ("does AURORA in any form help?") and is reported in the cards and table
   // rather than drawn as a fourth line competing with the decomposition.
   const chartContrasts = contrasts.filter((c) => c.family !== "pooled");
+  // The pooled contrast is reported instead of the decomposition, so it is not part of
+  // the multiplicity family and must not appear in the Bonferroni divisor shown here.
+  const nPairwiseContrasts = chartContrasts.length;
   const showPrecision = chartMetric === "precision";
   const metricKey = showPrecision ? "ciHalfWidth" : "mde";
 
@@ -670,22 +673,34 @@ export default function PowerCurves() {
                   ))}
                 </div>
               </div>
-              <div>
+              {/* Dimmed rather than hidden under an exploratory framing: the control
+                  still communicates what WOULD apply if the framing changed, so removing
+                  it would hide a live consequence of the framing choice. */}
+              <div className={exploratory ? "opacity-50" : ""}>
                 <label className={labelCls}>
                   Arm-level multiplicity
                   {exploratory && (
-                    <span className="text-gray-400"> (not applied)</span>
+                    <span className="text-gray-400"> — not applied</span>
                   )}
                 </label>
                 <select
                   value={multiplicity}
                   onChange={(e) => set("multiplicity")(e.target.value)}
-                  className={selectCls}
+                  className={`${selectCls} ${
+                    exploratory
+                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : ""
+                  }`}
                   disabled={exploratory}
+                  title={
+                    exploratory
+                      ? "Not applied: an exploratory framing makes no confirmatory claim, so there is no family-wise error rate to protect. Switch to Confirmatory to enable."
+                      : undefined
+                  }
                 >
                   <option value="dunnett">Dunnett (active vs control)</option>
                   <option value="bonferroni">
-                    Bonferroni (all {contrasts.length} pairwise)
+                    Bonferroni (all {nPairwiseContrasts} pairwise)
                   </option>
                   <option value="none">None</option>
                 </select>
