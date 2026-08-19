@@ -618,12 +618,12 @@ export default function PowerCurves() {
                 <label className={labelCls}>Allocation (A : B : C)</label>
                 <div className="flex gap-1 mb-1">
                   {[
-                    ["B.1", [1, 1, 1], "33/33/33 — even allocation"],
-                    ["B.2", [2, 1, 1], "50/25/25 — measurement-protective"],
+                    ["B.1", [1, 1, 1], "33/33/33, even allocation"],
+                    ["B.2", [2, 1, 1], "50/25/25, measurement-protective"],
                     [
                       "B.3",
                       [4, 3, 3],
-                      "40/30/30 — recommended: matches 45/27.5/27.5 on the binding contrast and beats it elsewhere",
+                      "40/30/30, recommended: ties 45/27.5/27.5 on the binding contrast and beats it elsewhere",
                     ],
                   ].map(([name, w, hint]) => {
                     const active =
@@ -680,7 +680,7 @@ export default function PowerCurves() {
                 <label className={labelCls}>
                   Arm-level multiplicity
                   {exploratory && (
-                    <span className="text-gray-400"> — not applied</span>
+                    <span className="text-gray-400"> (not applied)</span>
                   )}
                 </label>
                 <select
@@ -714,7 +714,7 @@ export default function PowerCurves() {
                 >
                   {contrasts.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.short} — {c.label}
+                      {c.short}: {c.label}
                     </option>
                   ))}
                 </select>
@@ -749,7 +749,7 @@ export default function PowerCurves() {
             <span className="font-medium">
               app-only vs TAU a within-clinician contrast
             </span>
-            , so the between-clinician variance cancels from it — the reason the
+            , so the between-clinician variance cancels from it. That is why the
             memo calls hybrid strictly superior. Assumes no spillover between
             app-only and TAU patients sharing a clinician, which is not modelled
             here.
@@ -896,7 +896,7 @@ export default function PowerCurves() {
           randomization === "hybrid" && (
             <div className="mt-2 text-xs text-amber-700">
               Note: under hybrid randomization the Dunnett correlation structure
-              is only approximate — app-only vs TAU is a within-clinician
+              is only approximate. App-only vs TAU is a within-clinician
               contrast with a smaller variance than clinician+patient vs TAU, so
               the true critical value is slightly higher than shown. Bonferroni
               is the conservative choice here.
@@ -1014,7 +1014,7 @@ export default function PowerCurves() {
               Exploratory framing: no efficacy claim, so no multiplicity
               adjustment is applied at either level. Alpha sets the confidence
               level ({ciLevel}% CI) rather than a significance threshold. The CI
-              half-width is driven entirely by the standard error — changing
+              half-width is driven entirely by the standard error, so changing
               alpha or the multiplicity rule does not change how precisely the
               effect is estimated, only what you could declare.
             </>
@@ -1022,7 +1022,7 @@ export default function PowerCurves() {
             <>
               Alpha is the per-outcome level; 0.025 reflects Benjamini-Hochberg
               adjustment across the three outcomes. Any arm-level adjustment is
-              applied on top of it — these are two separate layers. All power
+              applied on top of it, so these are two separate layers. All power
               figures are per-comparison.
             </>
           )}
@@ -1211,7 +1211,7 @@ export default function PowerCurves() {
         <p className="text-xs text-gray-500 mb-3">
           Differential item functioning across subgroups. Only AURORA users
           produce item responses, so this draws on the same arms as the
-          agreement substudy — and on all randomized patients, since DIF is
+          agreement substudy. It uses all randomized patients, since DIF is
           assessed on baseline responses rather than follow-up pairs.
         </p>
 
@@ -1351,7 +1351,7 @@ export default function PowerCurves() {
               {difThresholdN}-per-group minimum. Reaching it on this dimension
               needs roughly N={currentDif.nRequired.toLocaleString()} overall
               {threeArm &&
-                " (fewer if allocation is weighted toward the AURORA arms — try the 2:2:1 preset)"}
+                " (fewer if allocation is weighted toward the AURORA arms; try preset B.2)"}
               , or a narrower fairness claim restricted to larger subgroups.
             </span>
           )}

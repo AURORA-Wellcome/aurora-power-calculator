@@ -28,10 +28,10 @@ let failed = 0;
 function ok(name, cond, detail = "") {
   if (cond) {
     passed++;
-    console.log(`  PASS  ${name}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  PASS  ${name}${detail ? `: ${detail}` : ""}`);
   } else {
     failed++;
-    console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  FAIL  ${name}${detail ? `: ${detail}` : ""}`);
   }
 }
 
@@ -381,7 +381,7 @@ for (const [name, spec] of Object.entries(BASELINE)) {
 
   // The only intended change to two-arm results is that the hardcoded z lookup is
   // replaced by an exact quantile. Scaling the old MDE by the ratio of the critical
-  // multipliers must therefore reproduce the new value to machine precision — that is
+  // multipliers must therefore reproduce the new value to machine precision. That is
   // a far stronger check than a loose tolerance.
   const oldMult = spec.z[0] + spec.z[1];
   const newMult = m.zUnadjusted + m.zBeta;
@@ -511,7 +511,7 @@ ok(
   );
 
   // A-B has the same sample sizes but a smaller critical value (unadjusted), so its
-  // MDE must be slightly smaller — differing only through the critical value.
+  // MDE must be slightly smaller, differing only through the critical value.
   ok(
     "A-B MDE differs from A-C only via crit",
     Math.abs(
@@ -845,8 +845,16 @@ section("7b. Hybrid cluster-individual randomization");
   // randomization units rather than three.
   {
     const a = hy.allocation(N);
-    ok("hybrid uses 2 randomization units", a.groupClusters.length === 2, JSON.stringify(a.groupClusters));
-    ok("cluster mode uses 3", cl.allocation(N).groupClusters.length === 3, JSON.stringify(cl.allocation(N).groupClusters));
+    ok(
+      "hybrid uses 2 randomization units",
+      a.groupClusters.length === 2,
+      JSON.stringify(a.groupClusters),
+    );
+    ok(
+      "cluster mode uses 3",
+      cl.allocation(N).groupClusters.length === 3,
+      JSON.stringify(cl.allocation(N).groupClusters),
+    );
     ok(
       "hybrid clinicians split ROM vs no-ROM by patient share",
       a.groupClusters[0] === 33 && a.groupClusters[1] === 67,
@@ -859,7 +867,9 @@ section("7b. Hybrid cluster-individual randomization");
     );
     ok(
       "a no-ROM clinician splits its panel between B and C",
-      Math.abs(a.armClusterSize[1] + a.armClusterSize[2] - defaults.patientsPerCluster) < 1e-9,
+      Math.abs(
+        a.armClusterSize[1] + a.armClusterSize[2] - defaults.patientsPerCluster,
+      ) < 1e-9,
       `${a.armClusterSize[1]} + ${a.armClusterSize[2]}`,
     );
     ok(
@@ -870,9 +880,18 @@ section("7b. Hybrid cluster-individual randomization");
   }
 
   // Contrast typing: only B vs C is within-cluster.
-  ok("A vs C stays between-cluster", hy.hamd(N, pick(hy, "AC")).withinCluster === false);
-  ok("B vs C becomes within-cluster", hy.hamd(N, pick(hy, "BC")).withinCluster === true);
-  ok("A vs B stays between-cluster", hy.hamd(N, pick(hy, "AB")).withinCluster === false);
+  ok(
+    "A vs C stays between-cluster",
+    hy.hamd(N, pick(hy, "AC")).withinCluster === false,
+  );
+  ok(
+    "B vs C becomes within-cluster",
+    hy.hamd(N, pick(hy, "BC")).withinCluster === true,
+  );
+  ok(
+    "A vs B stays between-cluster",
+    hy.hamd(N, pick(hy, "AB")).withinCluster === false,
+  );
   ok(
     "cluster mode has no within-cluster contrast",
     cl.contrasts.every((c) => cl.hamd(N, c).withinCluster === false),
@@ -885,13 +904,23 @@ section("7b. Hybrid cluster-individual randomization");
     ok(
       "hybrid improves the B vs C MDE",
       hyBC < clBC,
-      `${hyBC.toFixed(3)} vs ${clBC.toFixed(3)} (${(((hyBC / clBC) - 1) * 100).toFixed(1)}%)`,
+      `${hyBC.toFixed(3)} vs ${clBC.toFixed(3)} (${((hyBC / clBC - 1) * 100).toFixed(1)}%)`,
     );
     // With ICC 0, there is no between-cluster variance to remove, so the two schemes
     // must agree on the within-cluster contrast. This is the sharpest check that the
     // gain is coming from the ICC and not from an arithmetic slip.
-    const cl0 = createModel({ ...base, randomization: "cluster", iccHamd: 0, clusterSizeCV: 0 });
-    const hy0 = createModel({ ...base, randomization: "hybrid", iccHamd: 0, clusterSizeCV: 0 });
+    const cl0 = createModel({
+      ...base,
+      randomization: "cluster",
+      iccHamd: 0,
+      clusterSizeCV: 0,
+    });
+    const hy0 = createModel({
+      ...base,
+      randomization: "hybrid",
+      iccHamd: 0,
+      clusterSizeCV: 0,
+    });
     // Compare at N=990: 99 clinicians divide evenly both ways (cluster 33/33/33 -> 330
     // per arm; hybrid 33/66 -> 66 x 5 = 330 per arm), so the two schemes hold identical
     // sample sizes and any remaining difference must come from the clustering term alone.
@@ -901,7 +930,8 @@ section("7b. Hybrid cluster-individual randomization");
       const aH = hy0.allocation(990);
       ok(
         "at N=990 both schemes give identical per-arm N",
-        aC.randomized[1] === aH.randomized[1] && aC.randomized[2] === aH.randomized[2],
+        aC.randomized[1] === aH.randomized[1] &&
+          aC.randomized[2] === aH.randomized[2],
         `cluster ${aC.randomized[1]}/${aC.randomized[2]} vs hybrid ${aH.randomized[1]}/${aH.randomized[2]}`,
       );
       close(
@@ -911,8 +941,16 @@ section("7b. Hybrid cluster-individual randomization");
         1e-12,
       );
       // And with ICC > 0 at that same N, hybrid must be strictly better.
-      const clP = createModel({ ...base, randomization: "cluster", clusterSizeCV: 0 });
-      const hyP = createModel({ ...base, randomization: "hybrid", clusterSizeCV: 0 });
+      const clP = createModel({
+        ...base,
+        randomization: "cluster",
+        clusterSizeCV: 0,
+      });
+      const hyP = createModel({
+        ...base,
+        randomization: "hybrid",
+        clusterSizeCV: 0,
+      });
       ok(
         "with ICC>0 at N=990 hybrid strictly beats cluster on B vs C",
         hyP.hamd(990, pick(hyP, "BC")).se < clP.hamd(990, pick(clP, "BC")).se,
@@ -921,11 +959,19 @@ section("7b. Hybrid cluster-individual randomization");
     }
     // And the gain must grow with the ICC.
     const gain = (icc) => {
-      const c = createModel({ ...base, randomization: "cluster", iccHamd: icc });
+      const c = createModel({
+        ...base,
+        randomization: "cluster",
+        iccHamd: icc,
+      });
       const h = createModel({ ...base, randomization: "hybrid", iccHamd: icc });
       return 1 - h.hamd(N, pick(h, "BC")).se / c.hamd(N, pick(c, "BC")).se;
     };
-    ok("hybrid gain on B vs C grows with ICC", gain(0.08) > gain(0.02), `${(gain(0.08) * 100).toFixed(1)}% vs ${(gain(0.02) * 100).toFixed(1)}%`);
+    ok(
+      "hybrid gain on B vs C grows with ICC",
+      gain(0.08) > gain(0.02),
+      `${(gain(0.08) * 100).toFixed(1)}% vs ${(gain(0.02) * 100).toFixed(1)}%`,
+    );
   }
 
   // The within-cluster variance factor must be exactly (1 - ICC) * (1/n1 + 1/n2).
@@ -940,7 +986,12 @@ section("7b. Hybrid cluster-individual randomization");
         (1 - defaults.iccHamd) *
         (1 / n1 + 1 / n2),
     );
-    close("within-cluster SE = sqrt(V (1-ICC)(1/n1+1/n2))", h.se, expected, 1e-12);
+    close(
+      "within-cluster SE = sqrt(V (1-ICC)(1/n1+1/n2))",
+      h.se,
+      expected,
+      1e-12,
+    );
   }
 
   // Spreading control patients across more clinicians also helps the between-cluster
@@ -948,7 +999,11 @@ section("7b. Hybrid cluster-individual randomization");
   {
     const hyAC = hy.hamd(N, pick(hy, "AC")).mde;
     const clAC = cl.hamd(N, pick(cl, "AC")).mde;
-    ok("hybrid also helps A vs C slightly", hyAC < clAC, `${hyAC.toFixed(3)} vs ${clAC.toFixed(3)}`);
+    ok(
+      "hybrid also helps A vs C slightly",
+      hyAC < clAC,
+      `${hyAC.toFixed(3)} vs ${clAC.toFixed(3)}`,
+    );
   }
 
   // Retention should show the same structure on its own ICC.
@@ -964,8 +1019,16 @@ section("7b. Hybrid cluster-individual randomization");
 
   // Two-arm designs must ignore the setting entirely - there is no second unit to split.
   {
-    const t2a = createModel({ ...defaults, designArms: 2, randomization: "hybrid" });
-    const t2b = createModel({ ...defaults, designArms: 2, randomization: "cluster" });
+    const t2a = createModel({
+      ...defaults,
+      designArms: 2,
+      randomization: "hybrid",
+    });
+    const t2b = createModel({
+      ...defaults,
+      designArms: 2,
+      randomization: "cluster",
+    });
     close(
       "two-arm ignores the randomization setting",
       t2a.hamd(N, t2a.contrasts[0]).se,
@@ -983,8 +1046,11 @@ section("7b. Hybrid cluster-individual randomization");
       hi.nTreatmentClusters > ci.nTreatmentClusters,
       `${hi.nTreatmentClusters} vs ${ci.nTreatmentClusters}`,
     );
-    ok("hybrid tightens the ICC interval", hi.ciHalfWidth < ci.ciHalfWidth,
-      `${hi.ciHalfWidth.toFixed(4)} vs ${ci.ciHalfWidth.toFixed(4)}`);
+    ok(
+      "hybrid tightens the ICC interval",
+      hi.ciHalfWidth < ci.ciHalfWidth,
+      `${hi.ciHalfWidth.toFixed(4)} vs ${ci.ciHalfWidth.toFixed(4)}`,
+    );
   }
 
   // Memo allocations B.1 / B.2 / B.3 must all be representable and internally consistent.
@@ -993,11 +1059,21 @@ section("7b. Hybrid cluster-individual randomization");
     ["B.2 50/25/25", [2, 1, 1]],
     ["B.3 40/30/30", [4, 3, 3]],
   ]) {
-    const m = createModel({ ...base, randomization: "hybrid", allocA: w[0], allocB: w[1], allocC: w[2] });
+    const m = createModel({
+      ...base,
+      randomization: "hybrid",
+      allocA: w[0],
+      allocB: w[1],
+      allocC: w[2],
+    });
     const a = m.allocation(N);
     const total = a.randomized.reduce((x, y) => x + y, 0);
     const pct = a.randomized.map((n) => Math.round((n / total) * 100));
-    ok(`${name} allocates as intended`, Math.abs(total - N) < 1e-9, `${pct.join("/")}%`);
+    ok(
+      `${name} allocates as intended`,
+      Math.abs(total - N) < 1e-9,
+      `${pct.join("/")}%`,
+    );
   }
 }
 
@@ -1028,8 +1104,9 @@ section("7c. Pooled A+B vs C contrast");
 
     // Pooling must use every AURORA patient against the control arm.
     const h = m.hamd(N, PC);
-    const expectedN =
-      Math.round(a.completers[0] + a.completers[1] + a.completers[2]);
+    const expectedN = Math.round(
+      a.completers[0] + a.completers[1] + a.completers[2],
+    );
     ok(
       `[${mode}] pooled uses A+B against C`,
       h.nContrastCompleters === expectedN,
@@ -1049,7 +1126,10 @@ section("7c. Pooled A+B vs C contrast");
     );
 
     // Pooled is neither purely within- nor purely between-clinician.
-    ok(`[${mode}] pooled is not flagged within-cluster`, h.withinCluster === false);
+    ok(
+      `[${mode}] pooled is not flagged within-cluster`,
+      h.withinCluster === false,
+    );
     ok(
       `[${mode}] pooled flagged mixed only under hybrid`,
       h.mixedCluster === (mode === "hybrid"),
@@ -1114,7 +1194,12 @@ section("7c. Pooled A+B vs C contrast");
   {
     const mB = mk({ multiplicity: "bonferroni", alpha: 0.05 });
     const expected = normInv(1 - 0.05 / (2 * 3));
-    close("pooled contrast does not inflate Bonferroni m", mB.zBonferroni, expected, 1e-12);
+    close(
+      "pooled contrast does not inflate Bonferroni m",
+      mB.zBonferroni,
+      expected,
+      1e-12,
+    );
   }
 
   // With ICC = 0 there is no clustering at all, so pooling is exactly the two-sample
