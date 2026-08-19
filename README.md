@@ -10,7 +10,7 @@ Interactive web application for exploring the precision and minimum detectable e
 - **Pooled A+B vs control**: a fourth selectable contrast treating either AURORA arm as exposed. Most apt for retention, where the mechanism is plausibly patient-facing and the clinician dashboard should not affect whether a patient stays enrolled. Assumes the effect is homogeneous across A and B; reported *instead of* the decomposition, so it does not inflate the multiplicity count.
 - **Arm-level multiplicity**: Dunnett's correction for the active-vs-control family (critical value computed by numerical integration, not looked up), with Bonferroni and unadjusted alternatives. The resulting critical value is always shown.
 - **Cost of the third arm**: three-arm charts overlay the equivalent two-arm MDE so the efficiency trade-off is visible rather than inferred.
-- **HAM-D Power Analysis**: MDEs for depression severity with adjustable intracluster correlation, covariate R², and measurement model options (sum score, Rasch partial credit, multi-facet Rasch).
+- **HAM-D Power Analysis**: MDEs for depression severity with adjustable intracluster correlation, covariate R², and measurement model options (sum score, Rasch partial credit, multi-facet Rasch). MFRM is the default planned analysis; charts keep a sum-score baseline line so the gain it assumes stays visible.
 - **Retention Analysis**: study retention modelled with survival analysis efficiency gains.
 - **Intraclass Correlation Validation**: precision for AURORA-clinician agreement. In three-arm mode both AURORA-using arms contribute rating pairs.
 - **Measurement fairness (DIF)**: subgroup sizes among AURORA users against a per-group adequacy minimum, plus the precision and detectable magnitude of a differential-item-functioning estimate in logits. Covers the "fair" half of the measurement aim, which is usually constrained by subgroup size rather than total N.
@@ -88,6 +88,8 @@ benchmarks (0.2 small, 0.5 medium, 0.8 large). In precision mode the reported ef
 is that of the CI half-width rather than the MDE, so it can be read against the same scale.
 
 ## Statistical notes
+
+- The default measurement model is **multi-facet Rasch (MFRM)**, which takes both the Rasch interval-scoring gain and the removal of rater variance: together they cut HAM-D error variance by 11.7% and the MDE by about 6% against a sum score. This is an assumption about the planned analysis, not a property of the data. It requires the model to actually be fitted, and a rating design that lets rater effects be separated (raters linked across patients rather than each patient rated by one rater alone). The sum-score baseline stays on the chart so the size of the assumption is visible.
 
 - **Precision does not depend on alpha or multiplicity.** The CI half-width is `crit x SE`, and the standard error, which is what determines how precisely an effect is estimated, is untouched by the alpha level or the multiplicity rule. Only the MDE, a testing quantity, moves. If the study is sized on precision, the whole multiplicity debate is moot.
 - Under the exploratory framing no adjustment is applied at either level, and alpha sets the confidence level rather than a significance threshold.

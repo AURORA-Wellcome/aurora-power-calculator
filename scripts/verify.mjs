@@ -796,11 +796,11 @@ section("7. Shipped defaults");
   const dm = createModel(defaults);
   const n = defaults.nClinicians * defaults.patientsPerCluster;
   const h = dm.hamd(n, dm.contrasts[0]);
-  close("default 2-arm HAM-D MDE at N=1000", h.mde, 1.448, 0.02);
+  close("default 2-arm HAM-D MDE at N=1000", h.mde, 1.361, 0.02);
   close(
     "default 2-arm HAM-D CI half-width at N=1000",
     h.ciHalfWidth,
-    1.017,
+    0.956,
     0.02,
   );
 
@@ -808,15 +808,36 @@ section("7. Shipped defaults");
   const AC = d3.contrasts.find((c) => c.id === "AC");
   const h3 = d3.hamd(n, AC);
   ok(
+    "default measurement model is MFRM",
+    defaults.measurementModel === "mfrm",
+    defaults.measurementModel,
+  );
+  {
+    // The MFRM gain is an assumption, so pin its size: ~11.7% off the error variance,
+    // ~6% off the MDE against a sum score. If either drifts, that is a real change to
+    // what the grant is claiming.
+    const dm = createModel(defaults);
+    const sum = createModel({ ...defaults, measurementModel: "sum" });
+    const c = dm.contrasts[0];
+    close("MFRM variance multiplier", dm.measurementVarianceMultiplier, 0.8835, 1e-9);
+    const gain = 1 - dm.hamd(1000, c).mde / sum.hamd(1000, c).mde;
+    close("MFRM improves the MDE ~6% vs sum score", gain, 0.06, 0.005);
+    ok(
+      "sum-score baseline is still reported for comparison",
+      dm.hamd(1000, c).baselineMDE > dm.hamd(1000, c).mde,
+      `${dm.hamd(1000, c).baselineMDE.toFixed(3)} vs ${dm.hamd(1000, c).mde.toFixed(3)}`,
+    );
+  }
+  ok(
     "default randomization is hybrid",
     defaults.randomization === "hybrid",
     defaults.randomization,
   );
-  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.494, 0.02);
+  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.405, 0.02);
   close(
     "default 3-arm A-C CI half-width at N=1000",
     h3.ciHalfWidth,
-    1.049,
+    0.986,
     0.02,
   );
   ok(
@@ -977,9 +998,12 @@ section("7b. Hybrid cluster-individual randomization");
 
   // The within-cluster variance factor must be exactly (1 - ICC) * (1/n1 + 1/n2).
   {
-    const a = hy.allocation(N);
-    const BC = pick(hy, "BC");
-    const h = hy.hamd(N, BC);
+    // Sum score pinned locally: this checks the clustering algebra, and the default
+    // MFRM multiplier would otherwise have to be threaded through the expected value.
+    const hySum = createModel({ ...base, randomization: "hybrid", measurementModel: "sum" });
+    const a = hySum.allocation(N);
+    const BC = pick(hySum, "BC");
+    const h = hySum.hamd(N, BC);
     const n1 = a.completers[1];
     const n2 = a.completers[2];
     const expected = Math.sqrt(
@@ -1206,7 +1230,13 @@ section("7c. Pooled A+B vs C contrast");
   // With ICC = 0 there is no clustering at all, so pooling is exactly the two-sample
   // result on the merged arm.
   {
-    const m = mk({ randomization: "hybrid", iccHamd: 0, clusterSizeCV: 0 });
+    // Sum score pinned for the same reason as above.
+    const m = mk({
+      randomization: "hybrid",
+      iccHamd: 0,
+      clusterSizeCV: 0,
+      measurementModel: "sum",
+    });
     const PC = get(m, "PC");
     const a = m.allocation(N);
     const nAB = a.completers[0] + a.completers[1];

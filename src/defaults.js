@@ -48,8 +48,12 @@ export const defaults = {
   r2Retention: 0.05,
   survivalEfficiency: 4.0,
 
-  // Measurement model
-  measurementModel: "sum",
+  // Measurement model. MFRM is the planned analysis: it takes the Rasch interval-scoring
+  // gain AND removes rater variance, cutting HAM-D error variance ~11.7% and the MDE ~6%
+  // against a sum score. That gain is contingent on actually fitting the model, and on a
+  // rating design that lets rater effects be separated (raters linked across patients).
+  // The charts keep a sum-score baseline line so the assumption stays visible.
+  measurementModel: "mfrm",
   sumScoreReliability: 0.86,
   raschReliability: 0.91,
   raterVarianceProp: 0.07,
