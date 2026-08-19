@@ -12,6 +12,7 @@ import {
   dunnettProb,
   allocateClusters,
   createModel,
+  cohensH,
 } from "../src/calc.js";
 import { defaults } from "../src/defaults.js";
 import {
@@ -1216,6 +1217,70 @@ section("7c. Pooled A+B vs C contrast");
       m.hamd(N, PC).se,
       Math.sqrt(V * (1 / nAB + 1 / nC)),
       1e-12,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("7d. Effect sizes (Cohen's d and h)");
+// ---------------------------------------------------------------------------
+
+{
+  // Cohen's h against hand-computed values.
+  // Reference values computed independently in R: 2*asin(sqrt(p)) differences.
+  close("cohensH(0.30, 0.24)", cohensH(0.3, 0.24), 0.1353341046, 1e-9);
+  close("cohensH(0.05, 0.10)", cohensH(0.05, 0.1), 0.192474297, 1e-9);
+  close("cohensH(0.45, 0.50)", cohensH(0.45, 0.5), 0.1001674212, 1e-9);
+  close("cohensH(p, p) = 0", cohensH(0.3, 0.3), 0, 1e-15);
+  close("cohensH is symmetric", cohensH(0.2, 0.4), cohensH(0.4, 0.2), 1e-15);
+  close("cohensH(0, 1) is its maximum, pi", cohensH(0, 1), Math.PI, 1e-12);
+
+  // The reason d cannot be reused for proportions: the same absolute gap is a much
+  // larger effect near the boundary than in the middle of the range. A d-style
+  // "difference over a fixed SD" would report these as identical.
+  {
+    const nearEdge = cohensH(0.05, 0.1);
+    const nearMid = cohensH(0.45, 0.5);
+    ok(
+      "same 5pp gap gives a larger h near the boundary",
+      nearEdge > nearMid * 1.9,
+      `${nearEdge.toFixed(4)} at 5->10% vs ${nearMid.toFixed(4)} at 45->50%`,
+    );
+  }
+
+  const m = createModel({ ...defaults, designArms: 3 });
+  const N = 1000;
+  for (const c of m.contrasts) {
+    const h = m.hamd(N, c);
+    const r = m.retention(N, c);
+    close(`[${c.short}] d = MDE / 7`, h.effectSize, h.mde / 7, 1e-12);
+    close(`[${c.short}] CI d = CI half-width / 7`, h.ciEffectSize, h.ciHalfWidth / 7, 1e-12);
+    close(
+      `[${c.short}] retention h matches its two rates`,
+      r.effectSizeH,
+      cohensH(defaults.controlAttrition, defaults.controlAttrition - r.mde / 100),
+      1e-12,
+    );
+    ok(
+      `[${c.short}] CI h is smaller than MDE h`,
+      r.ciEffectSizeH < r.effectSizeH,
+      `${r.ciEffectSizeH.toFixed(3)} vs ${r.effectSizeH.toFixed(3)}`,
+    );
+  }
+
+  // Effect sizes must move with the underlying quantity, not drift independently.
+  {
+    const small = createModel({ ...defaults, designArms: 3, nClinicians: 150 });
+    const big = createModel({ ...defaults, designArms: 3, nClinicians: 60 });
+    const c = (mm) => mm.contrasts.find((x) => x.id === "AC");
+    ok(
+      "larger N gives a smaller detectable d",
+      small.hamd(1500, c(small)).effectSize < big.hamd(600, c(big)).effectSize,
+    );
+    ok(
+      "larger N gives a smaller detectable h",
+      small.retention(1500, c(small)).effectSizeH <
+        big.retention(600, c(big)).effectSizeH,
     );
   }
 }

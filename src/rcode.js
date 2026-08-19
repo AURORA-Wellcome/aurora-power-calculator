@@ -297,6 +297,7 @@ calc_hamd_mde <- function(total_n, contrast) {
        ci_half_width = cr$z * se,
        baseline_mde = (cr$z + z_beta) * sqrt(base_variance * inv_n),
        effect_size = (cr$z + z_beta) * se / sigma_hamd,
+       ci_effect_size = cr$z * se / sigma_hamd,
        crit = cr$z, method = cr$method,
        n_clusters = alloc$n_clusters,
        clusters = alloc$clusters,
@@ -306,6 +307,14 @@ calc_hamd_mde <- function(total_n, contrast) {
 # ============================================
 # Retention MDE
 # ============================================
+# Cohen's h is the effect-size analogue of d for a difference between two proportions.
+# d does not transfer, because a proportion's variance is tied to its level; the arcsine
+# transform removes that dependence.
+
+cohens_h <- function(p1, p2) {
+  phi <- function(p) 2 * asin(sqrt(pmin(1, pmax(0, p))))
+  abs(phi(p1) - phi(p2))
+}
 
 calc_retention_mde <- function(total_n, contrast) {
   alloc <- allocation(total_n)
@@ -322,6 +331,8 @@ calc_retention_mde <- function(total_n, contrast) {
 
   list(mde_pp = mde * 100,
        ci_half_width_pp = cr$z * survival_se * 100,
+       effect_h = cohens_h(p0, p0 - mde),
+       ci_effect_h = cohens_h(p0, p0 - cr$z * survival_se),
        control_rate = p0 * 100,
        treatment_rate = (p0 - mde) * 100,
        binary_mde_pp = (cr$z + z_beta) * adjusted_se * 100)
@@ -415,12 +426,13 @@ for (ct in contrasts) {
   within <- is.null(ct$pooled) && cluster_group[ct$a] == cluster_group[ct$b]
   cat(paste0(ct$id, "  [", h$method, ", crit = ", round(h$crit, 4),
              ifelse(within, ", within-clinician", ""), "]\\n"))
-  cat(paste0("  HAM-D:     +/-", round(h$ci_half_width, 3), " points (",
-             round((1 - alpha) * 100), "% CI)   MDE ", round(h$mde, 3),
-             "  (d = ", round(h$effect_size, 3), ")\\n"))
-  cat(paste0("  Retention: +/-", round(r$ci_half_width_pp, 2), " pp        MDE ",
-             round(r$mde_pp, 2), " pp  (", round(r$treatment_rate, 1), "% vs ",
-             round(r$control_rate, 1), "%)\\n"))
+  cat(paste0("  HAM-D:     +/-", round(h$ci_half_width, 3), " points (d = ",
+             round(h$ci_effect_size, 3), ", ", round((1 - alpha) * 100), "% CI)",
+             "   MDE ", round(h$mde, 3), " (d = ", round(h$effect_size, 3), ")\\n"))
+  cat(paste0("  Retention: +/-", round(r$ci_half_width_pp, 2), " pp (h = ",
+             round(r$ci_effect_h, 3), ")",
+             "   MDE ", round(r$mde_pp, 2), " pp (h = ", round(r$effect_h, 3), ")",
+             "  [", round(r$treatment_rate, 1), "% vs ", round(r$control_rate, 1), "%]\\n"))
 }
 
 icc <- calc_icc_validation(total_n)

@@ -77,6 +77,16 @@ npm run build
 
 Creates a production build in the `build/` folder.
 
+## Effect sizes
+
+HAM-D reports Cohen's d (`MDE / 7`, the assumed SD). Retention reports Cohen's h,
+`|2 asin(sqrt(p1)) - 2 asin(sqrt(p2))|`, because d is defined for a mean difference and
+does not transfer to proportions: a proportion's variance is tied to its level, so the
+same absolute gap is a much larger effect near 0 or 1 than in the middle. A 5 percentage
+point gap is h = 0.19 at 5 to 10%, but h = 0.10 at 45 to 50%. Both use the same rough
+benchmarks (0.2 small, 0.5 medium, 0.8 large). In precision mode the reported effect size
+is that of the CI half-width rather than the MDE, so it can be read against the same scale.
+
 ## Statistical notes
 
 - **Precision does not depend on alpha or multiplicity.** The CI half-width is `crit x SE`, and the standard error, which is what determines how precisely an effect is estimated, is untouched by the alpha level or the multiplicity rule. Only the MDE, a testing quantity, moves. If the study is sized on precision, the whole multiplicity debate is moot.

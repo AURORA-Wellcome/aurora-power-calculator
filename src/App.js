@@ -11,7 +11,7 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { createModel } from "./calc";
+import { createModel, cohensH } from "./calc";
 import { buildRCode } from "./rcode";
 import { defaults } from "./defaults";
 import {
@@ -398,12 +398,18 @@ export default function PowerCurves() {
             </div>
             <div className="text-gray-500 text-xs">
               {exploratory
-                ? `${ciLevel}% CI · MDE ${currentHamd.mde.toFixed(2)}`
+                ? `d = ${currentHamd.ciEffectSize.toFixed(2)} · ${ciLevel}% CI`
                 : `d = ${currentHamd.effectSize.toFixed(2)}`}
             </div>
             {(useRasch || useMFRM) && (
               <div className="text-xs text-green-600">
                 (was {currentHamd.baselineMDE?.toFixed(2)} pts)
+              </div>
+            )}
+            {exploratory && (
+              <div className="text-xs text-gray-500">
+                MDE {currentHamd.mde.toFixed(2)} (d ={" "}
+                {currentHamd.effectSize.toFixed(2)})
               </div>
             )}
             {threeArm && (
@@ -425,8 +431,19 @@ export default function PowerCurves() {
                 : `${currentRetention.mde.toFixed(1)} pp`}
             </div>
             <div className="text-gray-500 text-xs">
+              h ={" "}
+              {(exploratory
+                ? currentRetention.ciEffectSizeH
+                : currentRetention.effectSizeH
+              ).toFixed(2)}
+              {exploratory ? ` · ${ciLevel}% CI` : ""}
+            </div>
+            <div className="text-gray-500 text-xs">
               {currentRetention.treatmentRate.toFixed(1)}% vs{" "}
               {currentRetention.controlRate}%
+              {exploratory
+                ? ` · MDE ${currentRetention.mde.toFixed(1)} (h = ${currentRetention.effectSizeH.toFixed(2)})`
+                : ""}
             </div>
             <div className="text-xs text-gray-400 hidden sm:block">
               (binary: {currentRetention.binaryMDE?.toFixed(1)} pp)
@@ -503,8 +520,16 @@ export default function PowerCurves() {
                   <div className="font-medium text-gray-700">{c.label}</div>
                   <div className="text-gray-600">
                     {exploratory
-                      ? `HAM-D ±${h.ciHalfWidth.toFixed(2)} pts (${ciLevel}% CI) · MDE ${h.mde.toFixed(2)}`
+                      ? `HAM-D ±${h.ciHalfWidth.toFixed(2)} pts (d = ${h.ciEffectSize.toFixed(2)}) · MDE ${h.mde.toFixed(2)} (d = ${h.effectSize.toFixed(2)})`
                       : `HAM-D MDE ${h.mde.toFixed(2)} pts · d = ${h.effectSize.toFixed(2)}`}
+                  </div>
+                  <div className="text-gray-600">
+                    {(() => {
+                      const r = model.retention(currentN, c);
+                      return exploratory
+                        ? `Retention ±${r.ciHalfWidth.toFixed(1)} pp (h = ${r.ciEffectSizeH.toFixed(2)}) · MDE ${r.mde.toFixed(1)} (h = ${r.effectSizeH.toFixed(2)})`
+                        : `Retention MDE ${r.mde.toFixed(1)} pp · h = ${r.effectSizeH.toFixed(2)}`;
+                    })()}
                   </div>
                   <div className="text-gray-400">
                     crit {h.crit.toFixed(3)} · {h.critMethod}
@@ -1406,7 +1431,10 @@ export default function PowerCurves() {
                 domain={[0, hamdMax]}
               />
               <Tooltip
-                formatter={(value, name) => [value.toFixed(2) + " pts", name]}
+                formatter={(value, name) => [
+                  `${value.toFixed(2)} pts (d = ${(value / 7).toFixed(2)})`,
+                  name,
+                ]}
                 labelFormatter={(n) =>
                   `N = ${n} (${Math.round(n / patientsPerCluster)} clusters)`
                 }
@@ -1576,7 +1604,10 @@ export default function PowerCurves() {
                 domain={[0, retMax]}
               />
               <Tooltip
-                formatter={(value, name) => [value.toFixed(2) + " pp", name]}
+                formatter={(value, name) => [
+                  `${value.toFixed(2)} pp (h = ${cohensH(controlAttrition, controlAttrition - value / 100).toFixed(2)})`,
+                  name,
+                ]}
                 labelFormatter={(n) =>
                   `N = ${n} (${Math.round(n / patientsPerCluster)} clusters)`
                 }
@@ -1765,6 +1796,7 @@ export default function PowerCurves() {
                 <th className="text-left p-1.5 md:p-2">
                   {showPrecision ? "Retention ±" : "Retention"}
                 </th>
+                <th className="text-left p-1.5 md:p-2">h</th>
                 <th className="text-left p-1.5 md:p-2 hidden sm:table-cell">
                   Tx Attrition
                 </th>
@@ -1801,12 +1833,21 @@ export default function PowerCurves() {
                       </td>
                     )}
                     <td className="p-1.5 md:p-2">
-                      {hamdSel.effectSize.toFixed(2)}
+                      {(showPrecision
+                        ? hamdSel.ciEffectSize
+                        : hamdSel.effectSize
+                      ).toFixed(2)}
                     </td>
                     <td className="p-1.5 md:p-2">
                       {showPrecision
                         ? retention.ciHalfWidth.toFixed(1)
                         : retention.mde.toFixed(1)}
+                    </td>
+                    <td className="p-1.5 md:p-2">
+                      {(showPrecision
+                        ? retention.ciEffectSizeH
+                        : retention.effectSizeH
+                      ).toFixed(2)}
                     </td>
                     <td className="p-1.5 md:p-2 hidden sm:table-cell">
                       {retention.treatmentRate.toFixed(1)}%
@@ -1823,13 +1864,19 @@ export default function PowerCurves() {
           </table>
         </div>
         <p className="text-xs text-gray-500 mt-2">
+          d is the HAM-D effect size (points / SD 7). h is Cohen&apos;s h, the
+          equivalent for a difference between two proportions; d does not apply
+          to retention because a proportion&apos;s variance depends on its
+          level. Both use the same rough benchmarks: 0.2 small, 0.5 medium, 0.8
+          large.{" "}
           {threeArm && (
             <>
-              HAM-D columns cover all three contrasts; d, Retention and
-              Intraclass Corr are for the selected contrast (
-              {activeContrast.short}). A-vs-B is both the least-powered contrast
-              and the one where the true difference is likely smallest, so its
-              MDE should not be read as a realistic target.{" "}
+              HAM-D columns cover every contrast; d, Retention, h and Intraclass
+              Corr are for the selected contrast ({activeContrast.short}).
+              A-vs-B is both the least-powered contrast and the one where the
+              true difference is likely smallest, so its MDE should not be read
+              as a realistic target. A+B vs C pools the two AURORA arms and
+              assumes the effect is the same in both.{" "}
             </>
           )}
           {(useRasch || useMFRM) &&

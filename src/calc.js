@@ -326,6 +326,16 @@ export function buildContrasts(s) {
 // Model
 // ---------------------------------------------------------------------------
 
+// Cohen's h: the effect-size analogue of d for a difference between two proportions.
+// d is defined for a mean difference and does not transfer to proportions, whose variance
+// is tied to their level; the arcsine transform removes that dependence. Same rough
+// benchmarks as d (0.2 small, 0.5 medium, 0.8 large).
+export function cohensH(p1, p2) {
+  const clamp = (p) => Math.min(1, Math.max(0, p));
+  const phi = (p) => 2 * Math.asin(Math.sqrt(clamp(p)));
+  return Math.abs(phi(p1) - phi(p2));
+}
+
 const SIGMA_HAMD = 7;
 const IPCW_VIF = 1.2;
 const REPEATED_MEASURES_GAIN = 1.43;
@@ -618,6 +628,9 @@ export function createModel(s) {
       ciHalfWidth: z * se,
       se,
       effectSize: (mult * se) / SIGMA_HAMD,
+      // Same units for the precision reading, so a CI half-width can be judged against
+      // the same benchmarks as the MDE.
+      ciEffectSize: (z * se) / SIGMA_HAMD,
       crit: z,
       critMethod: method,
       nClusters: alloc.nClusters,
@@ -658,6 +671,10 @@ export function createModel(s) {
 
     return {
       mde: mde * 100, // percentage points
+      // Effect sizes are computed on the proportions, not the percentage points: h is a
+      // function of the two rates, so it depends on where p0 sits, not just the gap.
+      effectSizeH: cohensH(p0, p0 - mde),
+      ciEffectSizeH: cohensH(p0, p0 - z * survivalSE),
       controlRate: p0 * 100,
       treatmentRate: (p0 - mde) * 100,
       binaryMDE: (z + zBeta) * adjustedSE * 100,
