@@ -445,8 +445,8 @@ ok(
   m3.arms.map((a) => a.key).join("/"),
 );
 ok(
-  "three contrasts built",
-  m3.contrasts.length === 3,
+  "four contrasts built (3 pairwise + 1 pooled)",
+  m3.contrasts.length === 4,
   m3.contrasts.map((c) => c.id).join("/"),
 );
 
@@ -806,11 +806,16 @@ section("7. Shipped defaults");
   const d3 = createModel({ ...defaults, designArms: 3 });
   const AC = d3.contrasts.find((c) => c.id === "AC");
   const h3 = d3.hamd(n, AC);
-  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.533, 0.02);
+  ok(
+    "default randomization is hybrid",
+    defaults.randomization === "hybrid",
+    defaults.randomization,
+  );
+  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.494, 0.02);
   close(
     "default 3-arm A-C CI half-width at N=1000",
     h3.ciHalfWidth,
-    1.076,
+    1.049,
     0.02,
   );
   ok(
@@ -821,11 +826,327 @@ section("7. Shipped defaults");
 }
 
 // ---------------------------------------------------------------------------
+section("7b. Hybrid cluster-individual randomization");
+// ---------------------------------------------------------------------------
+
+{
+  const base = {
+    ...defaults,
+    designArms: 3,
+    analysisFraming: "confirmatory",
+    multiplicity: "none",
+  };
+  const cl = createModel({ ...base, randomization: "cluster" });
+  const hy = createModel({ ...base, randomization: "hybrid" });
+  const N = 1000;
+  const pick = (m, id) => m.contrasts.find((c) => c.id === id);
+
+  // Structure: hybrid randomizes clinicians to ROM vs no-ROM only, so there are two
+  // randomization units rather than three.
+  {
+    const a = hy.allocation(N);
+    ok("hybrid uses 2 randomization units", a.groupClusters.length === 2, JSON.stringify(a.groupClusters));
+    ok("cluster mode uses 3", cl.allocation(N).groupClusters.length === 3, JSON.stringify(cl.allocation(N).groupClusters));
+    ok(
+      "hybrid clinicians split ROM vs no-ROM by patient share",
+      a.groupClusters[0] === 33 && a.groupClusters[1] === 67,
+      JSON.stringify(a.groupClusters),
+    );
+    ok(
+      "B and C sit in the same clinicians",
+      a.clusters[1] === a.clusters[2] && a.clusters[1] === a.groupClusters[1],
+      `B=${a.clusters[1]} C=${a.clusters[2]}`,
+    );
+    ok(
+      "a no-ROM clinician splits its panel between B and C",
+      Math.abs(a.armClusterSize[1] + a.armClusterSize[2] - defaults.patientsPerCluster) < 1e-9,
+      `${a.armClusterSize[1]} + ${a.armClusterSize[2]}`,
+    );
+    ok(
+      "patients still total N",
+      Math.abs(a.randomized.reduce((x, y) => x + y, 0) - N) < 1e-9,
+      String(a.randomized.reduce((x, y) => x + y, 0)),
+    );
+  }
+
+  // Contrast typing: only B vs C is within-cluster.
+  ok("A vs C stays between-cluster", hy.hamd(N, pick(hy, "AC")).withinCluster === false);
+  ok("B vs C becomes within-cluster", hy.hamd(N, pick(hy, "BC")).withinCluster === true);
+  ok("A vs B stays between-cluster", hy.hamd(N, pick(hy, "AB")).withinCluster === false);
+  ok(
+    "cluster mode has no within-cluster contrast",
+    cl.contrasts.every((c) => cl.hamd(N, c).withinCluster === false),
+  );
+
+  // The payoff: B vs C loses the between-clinician variance.
+  {
+    const hyBC = hy.hamd(N, pick(hy, "BC")).mde;
+    const clBC = cl.hamd(N, pick(cl, "BC")).mde;
+    ok(
+      "hybrid improves the B vs C MDE",
+      hyBC < clBC,
+      `${hyBC.toFixed(3)} vs ${clBC.toFixed(3)} (${(((hyBC / clBC) - 1) * 100).toFixed(1)}%)`,
+    );
+    // With ICC 0, there is no between-cluster variance to remove, so the two schemes
+    // must agree on the within-cluster contrast. This is the sharpest check that the
+    // gain is coming from the ICC and not from an arithmetic slip.
+    const cl0 = createModel({ ...base, randomization: "cluster", iccHamd: 0, clusterSizeCV: 0 });
+    const hy0 = createModel({ ...base, randomization: "hybrid", iccHamd: 0, clusterSizeCV: 0 });
+    // Compare at N=990: 99 clinicians divide evenly both ways (cluster 33/33/33 -> 330
+    // per arm; hybrid 33/66 -> 66 x 5 = 330 per arm), so the two schemes hold identical
+    // sample sizes and any remaining difference must come from the clustering term alone.
+    // At N=1000 the apportionments differ (330 vs 335) and would mask the comparison.
+    {
+      const aC = cl0.allocation(990);
+      const aH = hy0.allocation(990);
+      ok(
+        "at N=990 both schemes give identical per-arm N",
+        aC.randomized[1] === aH.randomized[1] && aC.randomized[2] === aH.randomized[2],
+        `cluster ${aC.randomized[1]}/${aC.randomized[2]} vs hybrid ${aH.randomized[1]}/${aH.randomized[2]}`,
+      );
+      close(
+        "with ICC=0 hybrid and cluster agree on B vs C",
+        hy0.hamd(990, pick(hy0, "BC")).se,
+        cl0.hamd(990, pick(cl0, "BC")).se,
+        1e-12,
+      );
+      // And with ICC > 0 at that same N, hybrid must be strictly better.
+      const clP = createModel({ ...base, randomization: "cluster", clusterSizeCV: 0 });
+      const hyP = createModel({ ...base, randomization: "hybrid", clusterSizeCV: 0 });
+      ok(
+        "with ICC>0 at N=990 hybrid strictly beats cluster on B vs C",
+        hyP.hamd(990, pick(hyP, "BC")).se < clP.hamd(990, pick(clP, "BC")).se,
+        `${hyP.hamd(990, pick(hyP, "BC")).se.toFixed(4)} vs ${clP.hamd(990, pick(clP, "BC")).se.toFixed(4)}`,
+      );
+    }
+    // And the gain must grow with the ICC.
+    const gain = (icc) => {
+      const c = createModel({ ...base, randomization: "cluster", iccHamd: icc });
+      const h = createModel({ ...base, randomization: "hybrid", iccHamd: icc });
+      return 1 - h.hamd(N, pick(h, "BC")).se / c.hamd(N, pick(c, "BC")).se;
+    };
+    ok("hybrid gain on B vs C grows with ICC", gain(0.08) > gain(0.02), `${(gain(0.08) * 100).toFixed(1)}% vs ${(gain(0.02) * 100).toFixed(1)}%`);
+  }
+
+  // The within-cluster variance factor must be exactly (1 - ICC) * (1/n1 + 1/n2).
+  {
+    const a = hy.allocation(N);
+    const BC = pick(hy, "BC");
+    const h = hy.hamd(N, BC);
+    const n1 = a.completers[1];
+    const n2 = a.completers[2];
+    const expected = Math.sqrt(
+      ((49 * (1 - defaults.r2Hamd) * 1.2) / 1.43) *
+        (1 - defaults.iccHamd) *
+        (1 / n1 + 1 / n2),
+    );
+    close("within-cluster SE = sqrt(V (1-ICC)(1/n1+1/n2))", h.se, expected, 1e-12);
+  }
+
+  // Spreading control patients across more clinicians also helps the between-cluster
+  // contrasts a little, because each clinician now contributes fewer control patients.
+  {
+    const hyAC = hy.hamd(N, pick(hy, "AC")).mde;
+    const clAC = cl.hamd(N, pick(cl, "AC")).mde;
+    ok("hybrid also helps A vs C slightly", hyAC < clAC, `${hyAC.toFixed(3)} vs ${clAC.toFixed(3)}`);
+  }
+
+  // Retention should show the same structure on its own ICC.
+  ok(
+    "retention B vs C is within-cluster under hybrid",
+    hy.retention(N, pick(hy, "BC")).withinCluster === true,
+  );
+  ok(
+    "hybrid improves the retention B vs C MDE",
+    hy.retention(N, pick(hy, "BC")).mde < cl.retention(N, pick(cl, "BC")).mde,
+    `${hy.retention(N, pick(hy, "BC")).mde.toFixed(2)} vs ${cl.retention(N, pick(cl, "BC")).mde.toFixed(2)} pp`,
+  );
+
+  // Two-arm designs must ignore the setting entirely - there is no second unit to split.
+  {
+    const t2a = createModel({ ...defaults, designArms: 2, randomization: "hybrid" });
+    const t2b = createModel({ ...defaults, designArms: 2, randomization: "cluster" });
+    close(
+      "two-arm ignores the randomization setting",
+      t2a.hamd(N, t2a.contrasts[0]).se,
+      t2b.hamd(N, t2b.contrasts[0]).se,
+      1e-12,
+    );
+  }
+
+  // The ICC substudy gains too: the same AURORA users spread over more clinicians.
+  {
+    const hi = hy.icc(N);
+    const ci = cl.icc(N);
+    ok(
+      "hybrid spreads ICC observations over more clinicians",
+      hi.nTreatmentClusters > ci.nTreatmentClusters,
+      `${hi.nTreatmentClusters} vs ${ci.nTreatmentClusters}`,
+    );
+    ok("hybrid tightens the ICC interval", hi.ciHalfWidth < ci.ciHalfWidth,
+      `${hi.ciHalfWidth.toFixed(4)} vs ${ci.ciHalfWidth.toFixed(4)}`);
+  }
+
+  // Memo allocations B.1 / B.2 / B.3 must all be representable and internally consistent.
+  for (const [name, w] of [
+    ["B.1 33/33/33", [1, 1, 1]],
+    ["B.2 50/25/25", [2, 1, 1]],
+    ["B.3 40/30/30", [4, 3, 3]],
+  ]) {
+    const m = createModel({ ...base, randomization: "hybrid", allocA: w[0], allocB: w[1], allocC: w[2] });
+    const a = m.allocation(N);
+    const total = a.randomized.reduce((x, y) => x + y, 0);
+    const pct = a.randomized.map((n) => Math.round((n / total) * 100));
+    ok(`${name} allocates as intended`, Math.abs(total - N) < 1e-9, `${pct.join("/")}%`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("7c. Pooled A+B vs C contrast");
+// ---------------------------------------------------------------------------
+
+{
+  const mk = (o) =>
+    createModel({
+      ...defaults,
+      designArms: 3,
+      analysisFraming: "confirmatory",
+      multiplicity: "none",
+      ...o,
+    });
+  const N = 1000;
+  const get = (m, id) => m.contrasts.find((c) => c.id === id);
+
+  for (const mode of ["cluster", "hybrid"]) {
+    const m = mk({ randomization: mode });
+    const PC = get(m, "PC");
+    const AC = get(m, "AC");
+    const BC = get(m, "BC");
+    const a = m.allocation(N);
+
+    ok(`[${mode}] pooled contrast exists`, Boolean(PC), PC && PC.short);
+
+    // Pooling must use every AURORA patient against the control arm.
+    const h = m.hamd(N, PC);
+    const expectedN =
+      Math.round(a.completers[0] + a.completers[1] + a.completers[2]);
+    ok(
+      `[${mode}] pooled uses A+B against C`,
+      h.nContrastCompleters === expectedN,
+      `${h.nContrastCompleters} of ${expectedN}`,
+    );
+
+    // The whole point: pooling beats either component contrast.
+    ok(
+      `[${mode}] pooled retention beats A vs C`,
+      m.retention(N, PC).mde < m.retention(N, AC).mde,
+      `${m.retention(N, PC).mde.toFixed(2)} vs ${m.retention(N, AC).mde.toFixed(2)} pp`,
+    );
+    ok(
+      `[${mode}] pooled retention beats B vs C`,
+      m.retention(N, PC).mde < m.retention(N, BC).mde,
+      `${m.retention(N, PC).mde.toFixed(2)} vs ${m.retention(N, BC).mde.toFixed(2)} pp`,
+    );
+
+    // Pooled is neither purely within- nor purely between-clinician.
+    ok(`[${mode}] pooled is not flagged within-cluster`, h.withinCluster === false);
+    ok(
+      `[${mode}] pooled flagged mixed only under hybrid`,
+      h.mixedCluster === (mode === "hybrid"),
+      String(h.mixedCluster),
+    );
+  }
+
+  // THE key check on the derivation: pooling a single arm must reproduce the ordinary
+  // pairwise factor exactly. If the variance-component form and the design-effect form
+  // disagree here, the pooled maths is wrong.
+  {
+    for (const mode of ["cluster", "hybrid"]) {
+      // Pinned at CV = 0, where the two cluster-size-variation conventions coincide.
+      // The inherited pairwise design effect multiplies the WHOLE variance by (1+CV^2),
+      // including the within-clinician part; the pooled/within-cluster forms apply it
+      // only to the between-clinician component, which is the principled treatment.
+      // At CV = 0 that difference vanishes and this isolates the algebra itself.
+      const m = mk({ randomization: mode, clusterSizeCV: 0 });
+      const AC = get(m, "AC");
+      const solo = { id: "solo", pooled: ["A"], b: "C", family: "pooled" };
+      // Reach the internals the same way the outcome functions do.
+      const viaPooled = m.hamd(N, solo).se;
+      const viaPairwise = m.hamd(N, AC).se;
+      close(
+        `[${mode}] pooling one arm reproduces the pairwise SE`,
+        viaPooled,
+        viaPairwise,
+        1e-12,
+      );
+    }
+  }
+
+  // The two CV conventions differ only in how cluster-size variation is applied, and
+  // only when CV > 0. Pin that the pooled form is the SMALLER (less inflated) one, so
+  // the divergence is a known direction rather than a surprise.
+  {
+    const m = mk({ randomization: "cluster", clusterSizeCV: 0.2 });
+    const solo = { id: "solo", pooled: ["A"], b: "C", family: "pooled" };
+    const r = m.hamd(N, solo).se / m.hamd(N, get(m, "AC")).se;
+    ok(
+      "at CV>0 the pooled form is slightly less inflated than the inherited one",
+      r > 0.97 && r < 1,
+      `ratio ${r.toFixed(4)}`,
+    );
+  }
+
+  // Under hybrid the shared B/C clinicians create a positive covariance that removes
+  // part of the between-clinician variance, so pooling should do better than it would
+  // if the arms were in separate clinicians at the same sample sizes.
+  {
+    const hy = mk({ randomization: "hybrid" });
+    const cl = mk({ randomization: "cluster" });
+    ok(
+      "hybrid pooled contrast is at least as precise as cluster pooled",
+      hy.hamd(N, get(hy, "PC")).se <= cl.hamd(N, get(cl, "PC")).se + 1e-12,
+      `${hy.hamd(N, get(hy, "PC")).se.toFixed(4)} vs ${cl.hamd(N, get(cl, "PC")).se.toFixed(4)}`,
+    );
+  }
+
+  // Multiplicity: the pooled view must not inflate the Bonferroni divisor, since it is
+  // reported instead of the decomposition rather than alongside it.
+  {
+    const mB = mk({ multiplicity: "bonferroni", alpha: 0.05 });
+    const expected = normInv(1 - 0.05 / (2 * 3));
+    close("pooled contrast does not inflate Bonferroni m", mB.zBonferroni, expected, 1e-12);
+  }
+
+  // With ICC = 0 there is no clustering at all, so pooling is exactly the two-sample
+  // result on the merged arm.
+  {
+    const m = mk({ randomization: "hybrid", iccHamd: 0, clusterSizeCV: 0 });
+    const PC = get(m, "PC");
+    const a = m.allocation(N);
+    const nAB = a.completers[0] + a.completers[1];
+    const nC = a.completers[2];
+    const V = (49 * (1 - defaults.r2Hamd) * 1.2) / 1.43;
+    close(
+      "ICC=0 pooled equals the plain two-sample SE",
+      m.hamd(N, PC).se,
+      Math.sqrt(V * (1 / nAB + 1 / nC)),
+      1e-12,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 section("8. Fairness / DIF substudy");
 // ---------------------------------------------------------------------------
 
 {
-  const conf = { ...defaults, analysisFraming: "confirmatory" };
+  // Pin cluster randomization: hybrid spreads AURORA users over more clinicians, which
+  // legitimately changes the effective cluster size. Hybrid is covered separately below.
+  const conf = {
+    ...defaults,
+    analysisFraming: "confirmatory",
+    randomization: "cluster",
+  };
   const m2 = createModel(conf);
   const m3 = createModel({ ...conf, designArms: 3 });
   const N = 1000;

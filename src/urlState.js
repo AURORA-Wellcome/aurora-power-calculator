@@ -43,7 +43,7 @@ export const SETTING_SPEC = {
     values: ["dunnett", "bonferroni", "none"],
   },
   smallSampleT: { type: "bool" },
-  selectedContrast: { type: "enum", values: ["AC", "BC", "AB"] },
+  selectedContrast: { type: "enum", values: ["AC", "BC", "AB", "PC"] },
   assumedEffect: { type: "number", min: 0, max: 50 },
   // Bounded strictly inside (0,1): normInv throws at the endpoints.
   power: { type: "number", min: 0.01, max: 0.999 },
@@ -70,6 +70,7 @@ export const SETTING_SPEC = {
   difThresholdN: { type: "int", min: 10, max: 100000 },
   difTargetLogits: { type: "number", min: 0.01, max: 5 },
   difItemInfo: { type: "number", min: 0.01, max: 5 },
+  randomization: { type: "enum", values: ["cluster", "hybrid"] },
 };
 
 // APPEND-ONLY. Adding a setting means pushing it onto the end; older (shorter) tokens

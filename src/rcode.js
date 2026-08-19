@@ -20,12 +20,20 @@ export function buildRCode(s) {
     ? `list(
   list(id = "A vs C", a = 1, b = 3, family = "dunnett"),
   list(id = "B vs C", a = 2, b = 3, family = "dunnett"),
-  list(id = "A vs B", a = 1, b = 2, family = "exploratory")
+  list(id = "A vs B", a = 1, b = 2, family = "exploratory"),
+  list(id = "A+B vs C", pooled = c(1, 2), b = 3, family = "pooled")
 )`
     : `list(
   list(id = "Tx vs Ctrl", a = 1, b = 2, family = "single")
 )`;
   const iccArms = threeArm ? "c(1, 2)" : "c(1)";
+  const hybrid = threeArm && s.randomization === "hybrid";
+  // clusterGroup: which randomization unit each arm's patients sit in.
+  const clusterGroups = threeArm
+    ? hybrid
+      ? "c(1, 2, 2)"
+      : "c(1, 2, 3)"
+    : "c(1, 2)";
 
   return `# AURORA Trial Power Calculations
 # Reproduces the minimum detectable effect (MDE) calculations from the calculator.
@@ -38,6 +46,10 @@ export function buildRCode(s) {
 design_arms         <- ${s.designArms}
 arm_names           <- ${armNames}
 arm_weights         <- ${weights}
+randomization       <- "${threeArm ? s.randomization : "cluster"}"
+# Which randomization unit each arm sits in. Under hybrid, arms B and C share the
+# no-ROM clinicians, which makes B vs C a within-clinician contrast.
+cluster_group       <- ${clusterGroups}
 total_n             <- ${totalN}
 patients_per_cluster <- ${s.patientsPerCluster}
 cluster_size_cv     <- ${s.clusterSizeCV}
@@ -126,14 +138,79 @@ allocate_clusters <- function(total, weights) {
   counts
 }
 
+# Clinicians are apportioned across randomization UNITS, not arms: [ROM, no-ROM] under
+# hybrid, one per arm under cluster randomization.
+n_groups      <- max(cluster_group)
+group_weights <- sapply(seq_len(n_groups), function(g) sum(arm_weights[cluster_group == g]))
+
 allocation <- function(total_n) {
-  n_clusters <- round(total_n / patients_per_cluster)
-  clusters   <- allocate_clusters(n_clusters, arm_weights)
-  randomized <- clusters * patients_per_cluster
+  n_clusters     <- round(total_n / patients_per_cluster)
+  group_clusters <- allocate_clusters(n_clusters, group_weights)
+
+  # Share of a unit's panel belonging to each arm: 1 for a cluster-randomized arm,
+  # b/(b+c) or c/(b+c) for the two patient-level arms inside a no-ROM clinician.
+  share_in_group   <- arm_weights / group_weights[cluster_group]
+  arm_cluster_size <- share_in_group * patients_per_cluster
+
+  clusters   <- group_clusters[cluster_group]
+  randomized <- clusters * arm_cluster_size
+
   list(n_clusters = n_clusters,
-       clusters   = clusters,
+       group_clusters = group_clusters,
+       clusters = clusters,
        randomized = randomized,
-       completers = randomized * (1 - control_attrition))
+       completers = randomized * (1 - control_attrition),
+       arm_cluster_size = arm_cluster_size)
+}
+
+# Variance for a POOLED contrast, in variance-component form. The pooled arm can straddle
+# both randomization units under hybrid, and arms sharing clinicians are correlated - the
+# cross terms below are what a naive "merge the arms" calculation would miss.
+pooled_factor <- function(alloc, contrast, icc, field) {
+  idx <- contrast$pooled
+  ref <- contrast$b
+  ns  <- alloc[[field]][idx]
+  w   <- ns / sum(ns)
+  cv_adj <- 1 + cluster_size_cv^2
+
+  between <- 1 / alloc$clusters[ref]
+  within  <- 1 / alloc[[field]][ref]
+  for (k in seq_along(idx)) {
+    i <- idx[k]
+    between <- between + w[k]^2 / alloc$clusters[i]
+    within  <- within  + w[k]^2 / alloc[[field]][i]
+    if (cluster_group[i] == cluster_group[ref])
+      between <- between - 2 * w[k] / alloc$clusters[i]
+  }
+  if (length(idx) > 1) {
+    for (a in 1:(length(idx) - 1)) for (b in (a + 1):length(idx)) {
+      if (cluster_group[idx[a]] == cluster_group[idx[b]])
+        between <- between + 2 * w[a] * w[b] / alloc$clusters[idx[a]]
+    }
+  }
+  icc * cv_adj * between + (1 - icc) * within
+}
+
+# Design-effect-weighted sum of inverse sample sizes for a contrast. A within-clinician
+# contrast drops the between-clinician variance entirely, hence (1 - ICC).
+contrast_factor <- function(alloc, contrast, icc, field) {
+  if (!is.null(contrast$pooled)) return(pooled_factor(alloc, contrast, icc, field))
+  i <- contrast$a; j <- contrast$b
+  n1 <- alloc[[field]][i]; n2 <- alloc[[field]][j]
+  attrition <- if (field == "completers") 1 - control_attrition else 1
+
+  if (cluster_group[i] == cluster_group[j]) {
+    return((1 - icc) * (1 / n1 + 1 / n2))
+  }
+  cv_adj <- 1 + cluster_size_cv^2
+  de <- function(m) (1 + (m * attrition - 1) * icc) * cv_adj
+  de(alloc$arm_cluster_size[i]) / n1 + de(alloc$arm_cluster_size[j]) / n2
+}
+
+# Clinician counts for a set of arms, counting each randomization unit once.
+group_clusters_for <- function(arm_idx) {
+  g <- unique(cluster_group[arm_idx])
+  allocation(total_n)$group_clusters[g]
 }
 
 # ============================================
@@ -145,7 +222,8 @@ control_w   <- arm_weights[n_arms]
 active_lams <- sqrt(arm_weights[-n_arms] / (arm_weights[-n_arms] + control_w))
 
 z_unadjusted <- qnorm(1 - alpha / 2)
-z_bonferroni <- qnorm(1 - alpha / (2 * length(contrasts)))
+n_pairwise   <- sum(sapply(contrasts, function(c) c$family != "pooled"))
+z_bonferroni <- qnorm(1 - alpha / (2 * n_pairwise))
 z_dunnett    <- if (n_arms == 2) z_unadjusted else dunnett_crit(active_lams, alpha)
 
 # Cornish-Fisher t quantile, matching the calculator's small-sample option.
@@ -163,7 +241,7 @@ crit_for <- function(contrast, total_n) {
   } else if (n_arms == 2 || multiplicity == "none") {
     z <- z_unadjusted; method <- if (n_arms == 2) "unadjusted" else "none"
   } else if (multiplicity == "bonferroni") {
-    z <- z_bonferroni; method <- paste0("Bonferroni (m=", length(contrasts), ")")
+    z <- z_bonferroni; method <- paste0("Bonferroni (m=", n_pairwise, ")")
   } else if (contrast$family == "dunnett") {
     z <- z_dunnett;    method <- paste0("Dunnett (k=", length(active_lams), ")")
   } else {
@@ -201,20 +279,18 @@ if (use_mfrm) meas_mult <- meas_mult * (1 - rater_variance_prop)
 
 calc_hamd_mde <- function(total_n, contrast) {
   alloc <- allocation(total_n)
-  n1 <- alloc$completers[contrast$a]
+  n1 <- if (is.null(contrast$pooled)) alloc$completers[contrast$a] else sum(alloc$completers[contrast$pooled])
   n2 <- alloc$completers[contrast$b]
 
-  sigma2_adj   <- sigma_hamd^2 * (1 - r2_hamd)
-  cluster_size <- patients_per_cluster * (1 - control_attrition)
-  design_effect <- (1 + (cluster_size - 1) * icc_hamd) * (1 + cluster_size_cv^2)
+  sigma2_adj <- sigma_hamd^2 * (1 - r2_hamd)
   ipcw_vif <- 1.2                 # inverse probability of censoring weights
   rm_gain  <- 1.43                # repeated measures efficiency, 4 timepoints, r ~ 0.5
 
-  base_variance <- (sigma2_adj * design_effect * ipcw_vif) / rm_gain
+  base_variance <- (sigma2_adj * ipcw_vif) / rm_gain
   net_variance  <- base_variance * meas_mult
 
   cr <- crit_for(contrast, total_n)
-  inv_n <- 1 / n1 + 1 / n2
+  inv_n <- contrast_factor(alloc, contrast, icc_hamd, "completers")
   se <- sqrt(net_variance * inv_n)
 
   list(mde = (cr$z + z_beta) * se,
@@ -233,14 +309,11 @@ calc_hamd_mde <- function(total_n, contrast) {
 
 calc_retention_mde <- function(total_n, contrast) {
   alloc <- allocation(total_n)
-  n1 <- alloc$randomized[contrast$a]
-  n2 <- alloc$randomized[contrast$b]
 
-  design_effect <- (1 + (patients_per_cluster - 1) * icc_retention) * (1 + cluster_size_cv^2)
   p0 <- control_attrition
 
-  base_se      <- sqrt(p0 * (1 - p0) * (1 / n1 + 1 / n2))
-  clustered_se <- base_se * sqrt(design_effect)
+  inv_n        <- contrast_factor(alloc, contrast, icc_retention, "randomized")
+  clustered_se <- sqrt(p0 * (1 - p0) * inv_n)
   adjusted_se  <- clustered_se * sqrt(1 - r2_retention)
   survival_se  <- adjusted_se / sqrt(survival_efficiency)
 
@@ -261,7 +334,8 @@ calc_retention_mde <- function(total_n, contrast) {
 calc_icc_validation <- function(total_n) {
   alloc <- allocation(total_n)
   n_patients <- sum(alloc$completers[icc_arms])
-  n_clusters_icc <- sum(alloc$clusters[icc_arms])
+  # Dedupe by randomization unit: under hybrid two contributing arms can share clinicians.
+  n_clusters_icc <- sum(group_clusters_for(icc_arms))
 
   n_observations <- n_patients * n_followups
   avg_obs_per_cluster <- n_observations / n_clusters_icc
@@ -288,6 +362,7 @@ calc_icc_validation <- function(total_n) {
 calc_dif <- function(total_n) {
   alloc <- allocation(total_n)
   n_users <- sum(alloc$randomized[icc_arms])
+  n_clusters_used <- sum(group_clusters_for(icc_arms))
 
   # Round once and take the remainder so the two counts always sum to n_users.
   n_focal <- max(1, min(n_users - 1, round(n_users * dif_subgroup_share)))
@@ -296,7 +371,8 @@ calc_dif <- function(total_n) {
   # Var(b_hat) ~ 1/(n * I) for an item carrying information I; I = 0.25 (a well-targeted
   # dichotomous item) recovers the familiar SE(b) ~ 2/sqrt(n).
   # The design effect uses the randomized cluster size, matching the sample being used.
-  design_effect <- (1 + (patients_per_cluster - 1) * icc_hamd) * (1 + cluster_size_cv^2)
+  users_per_cluster <- n_users / n_clusters_used
+  design_effect <- (1 + (users_per_cluster - 1) * icc_hamd) * (1 + cluster_size_cv^2)
   se_raw <- sqrt(1 / (n_focal * dif_item_info) + 1 / (n_reference * dif_item_info))
   se <- se_raw * sqrt(design_effect)
 
@@ -325,8 +401,8 @@ calc_dif <- function(total_n) {
 # ============================================
 
 alloc <- allocation(total_n)
-cat(paste0("Design: ", design_arms, "-arm cluster-randomized, ", analysis_framing,
-           ", N = ", total_n, "\\n"))
+cat(paste0("Design: ", design_arms, "-arm, ", randomization, " randomization, ",
+           analysis_framing, ", N = ", total_n, "\\n"))
 cat(paste0("  Clusters: ", alloc$n_clusters, " (",
            paste(paste0(arm_names, "=", alloc$clusters), collapse = ", "), ")\\n"))
 cat(paste0("  Critical values: unadjusted ", round(z_unadjusted, 4),
@@ -336,7 +412,9 @@ cat(paste0("  Critical values: unadjusted ", round(z_unadjusted, 4),
 for (ct in contrasts) {
   h <- calc_hamd_mde(total_n, ct)
   r <- calc_retention_mde(total_n, ct)
-  cat(paste0(ct$id, "  [", h$method, ", crit = ", round(h$crit, 4), "]\\n"))
+  within <- is.null(ct$pooled) && cluster_group[ct$a] == cluster_group[ct$b]
+  cat(paste0(ct$id, "  [", h$method, ", crit = ", round(h$crit, 4),
+             ifelse(within, ", within-clinician", ""), "]\\n"))
   cat(paste0("  HAM-D:     +/-", round(h$ci_half_width, 3), " points (",
              round((1 - alpha) * 100), "% CI)   MDE ", round(h$mde, 3),
              "  (d = ", round(h$effect_size, 3), ")\\n"))

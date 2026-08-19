@@ -211,17 +211,58 @@ export const ARM_LABELS = {
   C2: "Control",
 };
 
+// Hybrid randomization only exists for the three-arm design: it needs a no-ROM cluster
+// containing two patient-level conditions.
+export function isHybrid(s) {
+  return s.designArms === 3 && s.randomization === "hybrid";
+}
+
 export function buildArms(s) {
   if (s.designArms === 3) {
+    // clusterGroup identifies the randomization unit an arm's patients sit in. Under
+    // HYBRID randomization clinicians are randomized to ROM vs no-ROM, and patients
+    // inside no-ROM clinicians are then individually randomized to app-only vs TAU - so
+    // B and C share clusters and their contrast is a within-cluster comparison.
+    const hybrid = isHybrid(s);
     return [
-      { key: "A", label: ARM_LABELS.A3, short: "Clin+Pt", weight: s.allocA },
-      { key: "B", label: ARM_LABELS.B3, short: "Pt-only", weight: s.allocB },
-      { key: "C", label: ARM_LABELS.C3, short: "Control", weight: s.allocC },
+      {
+        key: "A",
+        label: ARM_LABELS.A3,
+        short: "Clin+Pt",
+        weight: s.allocA,
+        clusterGroup: 0,
+      },
+      {
+        key: "B",
+        label: ARM_LABELS.B3,
+        short: "Pt-only",
+        weight: s.allocB,
+        clusterGroup: hybrid ? 1 : 1,
+      },
+      {
+        key: "C",
+        label: ARM_LABELS.C3,
+        short: "Control",
+        weight: s.allocC,
+        clusterGroup: hybrid ? 1 : 2,
+      },
     ];
   }
   return [
-    { key: "A", label: ARM_LABELS.A2, short: "Tx", weight: s.treatmentRatio },
-    { key: "C", label: ARM_LABELS.C2, short: "Ctrl", weight: 1 },
+    {
+      key: "A",
+      label: ARM_LABELS.A2,
+      short: "Tx",
+      weight: s.treatmentRatio,
+      clusterGroup: 0,
+    },
+    {
+      key: "C",
+      label: ARM_LABELS.C2,
+      short: "Ctrl",
+      weight: 1,
+      clusterGroup: 1,
+    },
   ];
 }
 
@@ -255,6 +296,17 @@ export function buildContrasts(s) {
         primary: false,
         family: "exploratory", // no shared control, so outside the Dunnett family
       },
+      {
+        id: "PC",
+        pooled: ["A", "B"],
+        b: "C",
+        label: "AURORA pooled (either arm) vs Control",
+        short: "A+B vs C",
+        primary: false,
+        // Not an extra test in the multiplicity family: it is an alternative view of the
+        // same data, reported INSTEAD of the decomposition, so it does not inflate m.
+        family: "pooled",
+      },
     ];
   }
   return [
@@ -279,6 +331,7 @@ const IPCW_VIF = 1.2;
 const REPEATED_MEASURES_GAIN = 1.43;
 
 export function createModel(s) {
+  const hybrid = isHybrid(s);
   const arms = buildArms(s);
   const contrasts = buildContrasts(s);
   const armIndex = Object.fromEntries(arms.map((a, i) => [a.key, i]));
@@ -293,9 +346,18 @@ export function createModel(s) {
     .slice(0, -1)
     .map((a) => Math.sqrt(a.weight / (a.weight + controlW)));
 
-  const nPairwise = contrasts.length;
+  // The pooled contrast is an alternative presentation, not a fourth hypothesis, so it
+  // is excluded from the multiplicity count.
+  const nPairwise = contrasts.filter((c) => c.family !== "pooled").length;
   const zUnadjusted = normInv(1 - s.alpha / 2);
   const zBonferroni = normInv(1 - s.alpha / (2 * nPairwise));
+  // CAVEAT under hybrid randomization: Dunnett's lambda parameterisation assumes the
+  // active-vs-control statistics share a common variance structure through the control
+  // arm. With hybrid, B vs C is a within-clinician contrast with a materially smaller
+  // variance than A vs C, so the true correlation between the two statistics is lower
+  // than this formula implies, and the correct critical value is slightly HIGHER (closer
+  // to Bonferroni). The default exploratory framing applies no adjustment so this does
+  // not bite; under a confirmatory framing with hybrid, prefer Bonferroni.
   const zDunnett =
     arms.length === 2 ? zUnadjusted : dunnettCrit(activeLambdas, s.alpha);
 
@@ -373,38 +435,162 @@ export function createModel(s) {
 
   // --- allocation ----------------------------------------------------------
 
+  // Distinct randomization units. Under cluster randomization every arm has its own
+  // clinicians; under hybrid, arms B and C share the no-ROM clinicians.
+  const nGroups = Math.max(...arms.map((a) => a.clusterGroup)) + 1;
+  const groupWeights = Array.from({ length: nGroups }, (_, g) =>
+    arms
+      .filter((a) => a.clusterGroup === g)
+      .reduce((acc, a) => acc + a.weight, 0),
+  );
+
   function allocation(totalN) {
     const nClusters = Math.round(totalN / s.patientsPerCluster);
-    const clusters = allocateClusters(
-      nClusters,
-      arms.map((a) => a.weight),
+
+    // Clinicians are apportioned across randomization UNITS, not arms. With hybrid that
+    // is [ROM, no-ROM]; with cluster randomization it is one unit per arm, which
+    // reproduces the original behaviour exactly.
+    const groupClusters = allocateClusters(nClusters, groupWeights);
+
+    // Within a unit, patients split by the arms' relative weights. That share is 1 for a
+    // cluster-randomized arm and b/(b+c) or c/(b+c) for the two hybrid patient-level arms.
+    const shareInGroup = arms.map(
+      (a) => a.weight / groupWeights[a.clusterGroup],
     );
-    const randomized = clusters.map((c) => c * s.patientsPerCluster);
+    // Patients of THIS arm per clinician it is present in - the cluster size that drives
+    // this arm's design effect. Under hybrid a no-ROM clinician contributes only part of
+    // its panel to each of B and C.
+    const armClusterSize = shareInGroup.map((f) => f * s.patientsPerCluster);
+
+    const clusters = arms.map((a) => groupClusters[a.clusterGroup]);
+    const randomized = arms.map(
+      (a, i) => groupClusters[a.clusterGroup] * armClusterSize[i],
+    );
     const completers = randomized.map((n) => n * (1 - s.controlAttrition));
-    return { nClusters, clusters, randomized, completers, arms };
+
+    return {
+      nClusters,
+      groupClusters,
+      clusters,
+      randomized,
+      completers,
+      armClusterSize,
+      arms,
+      hybrid: hybrid,
+    };
+  }
+
+  // Variance for a POOLED contrast (several arms averaged, against one comparator),
+  // written in variance-component form because the pooled arm can straddle two
+  // randomization units. With total variance s^2 split as between-clinician (rho) and
+  // within-clinician (1 - rho):
+  //
+  //   Var(T)/s^2 = rho * [ SUM_k w_k^2/J_k + 1/J_ref
+  //                        + 2 SUM_{k<l} w_k w_l [same unit]/J
+  //                        - 2 SUM_k w_k [same unit as ref]/J ]
+  //              + (1 - rho) * [ SUM_k w_k^2/n_k + 1/n_ref ]
+  //
+  // The cross terms are what make this more than a merged arm: under hybrid, B and C
+  // share clinicians, so their means are positively correlated and part of the
+  // between-clinician variance cancels. Weights are proportional to sample size.
+  //
+  // Sanity: with one pooled arm and distinct units this reduces to rho(1/J_i + 1/J_j) +
+  // (1-rho)(1/n_i + 1/n_j), which equals the pairwise DE_i/n_i + DE_j/n_j exactly when
+  // clusterSizeCV = 0.
+  //
+  // CONVENTION NOTE: the inherited pairwise design effect is (1 + (m-1)rho)(1 + CV^2),
+  // which inflates the whole variance by cluster-size variation - including the
+  // within-clinician part, which unequal cluster sizes should not affect. The pooled and
+  // within-cluster forms here apply (1 + CV^2) only to the between-clinician component,
+  // which is the principled treatment. The two therefore diverge slightly when CV > 0
+  // (the pooled form being ~1.5% less inflated at CV = 0.2). The inherited formula is
+  // kept for the pairwise path so the two-arm regression against the original
+  // implementation continues to hold exactly.
+  function pooledFactor(alloc, contrast, icc, field) {
+    const idx = contrast.pooled.map((k) => armIndex[k]);
+    const ref = armIndex[contrast.b];
+    const ns = idx.map((i) => alloc[field][i]);
+    const total = ns.reduce((a, b) => a + b, 0);
+    const w = ns.map((n) => n / total);
+    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
+    const J = (i) => alloc.clusters[i];
+    const sameUnit = (i, j) => arms[i].clusterGroup === arms[j].clusterGroup;
+
+    let between = 1 / J(ref);
+    let within = 1 / alloc[field][ref];
+    idx.forEach((i, a) => {
+      between += (w[a] * w[a]) / J(i);
+      within += (w[a] * w[a]) / alloc[field][i];
+      if (sameUnit(i, ref)) between -= (2 * w[a]) / J(i);
+    });
+    for (let a = 0; a < idx.length; a++) {
+      for (let b = a + 1; b < idx.length; b++) {
+        if (sameUnit(idx[a], idx[b])) {
+          between += (2 * w[a] * w[b]) / J(idx[a]);
+        }
+      }
+    }
+    return icc * cvAdj * between + (1 - icc) * within;
+  }
+
+  // Variance multiplier for a contrast: the sum of design-effect-weighted inverse sample
+  // sizes. Returned separately from the outcome variance so each contrast can carry its
+  // own clustering, which is the whole point of the hybrid design.
+  function contrastFactor(alloc, contrast, icc, field) {
+    if (contrast.pooled) return pooledFactor(alloc, contrast, icc, field);
+    const i = armIndex[contrast.a];
+    const j = armIndex[contrast.b];
+    const n1 = alloc[field][i];
+    const n2 = alloc[field][j];
+    const attrition = field === "completers" ? 1 - s.controlAttrition : 1;
+
+    if (arms[i].clusterGroup === arms[j].clusterGroup) {
+      // WITHIN-CLUSTER contrast: both arms sit inside the same clinicians, so the
+      // clinician effect is common to both and cancels from the difference. Only the
+      // within-clinician variance remains, hence (1 - ICC) instead of a design effect
+      // above 1. This is where hybrid randomization buys its power.
+      return (1 - icc) * (1 / n1 + 1 / n2);
+    }
+
+    // BETWEEN-CLUSTER contrast: each arm carries its own design effect, computed on the
+    // number of that arm's patients per clinician. Arm-specific rather than shared,
+    // because under hybrid the ROM and no-ROM arms have different effective sizes.
+    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
+    const de = (m) => (1 + (m * attrition - 1) * icc) * cvAdj;
+    return de(alloc.armClusterSize[i]) / n1 + de(alloc.armClusterSize[j]) / n2;
+  }
+
+  // A pooled contrast straddles both randomization units under hybrid, so it is neither
+  // purely within- nor purely between-clinician.
+  function isWithin(contrast) {
+    if (contrast.pooled) return false;
+    return (
+      arms[armIndex[contrast.a]].clusterGroup ===
+      arms[armIndex[contrast.b]].clusterGroup
+    );
   }
 
   function pairOf(alloc, contrast, field) {
-    return [
-      alloc[field][armIndex[contrast.a]],
-      alloc[field][armIndex[contrast.b]],
-    ];
+    const rhs = alloc[field][armIndex[contrast.b]];
+    if (contrast.pooled) {
+      return [
+        contrast.pooled.reduce((acc, k) => acc + alloc[field][armIndex[k]], 0),
+        rhs,
+      ];
+    }
+    return [alloc[field][armIndex[contrast.a]], rhs];
   }
 
   // --- HAM-D ---------------------------------------------------------------
 
+  // Per-patient outcome variance, WITHOUT any clustering term - the design effect now
+  // varies by contrast (see contrastFactor) rather than being shared across all of them.
   function hamdVariance() {
     const sigma2Adj = SIGMA_HAMD * SIGMA_HAMD * (1 - s.r2Hamd);
-    const clusterSize = s.patientsPerCluster * (1 - s.controlAttrition);
-    const designEffect =
-      (1 + (clusterSize - 1) * s.iccHamd) *
-      (1 + s.clusterSizeCV * s.clusterSizeCV);
-    const baseVariance =
-      (sigma2Adj * designEffect * IPCW_VIF) / REPEATED_MEASURES_GAIN;
+    const baseVariance = (sigma2Adj * IPCW_VIF) / REPEATED_MEASURES_GAIN;
     return {
       baseVariance,
       netVariance: baseVariance * measurementVarianceMultiplier,
-      designEffect,
     };
   }
 
@@ -415,9 +601,9 @@ export function createModel(s) {
     const { z, method } = critInfo(contrast, totalN);
     const mult = z + zBeta;
 
-    // sqrt(V * (1/n1 + 1/n2)); the old code wrote this as sqrt(2V/nHarmonic), which is
-    // the same quantity for two arms.
-    const invN = 1 / n1 + 1 / n2;
+    // Design-effect-weighted sum of inverse sample sizes. For a cluster-randomized
+    // two-arm design this reduces to DE * (1/n1 + 1/n2), exactly as before.
+    const invN = contrastFactor(alloc, contrast, s.iccHamd, "completers");
     const se = Math.sqrt(netVariance * invN);
     const baselineSe = Math.sqrt(baseVariance * invN);
 
@@ -438,6 +624,8 @@ export function createModel(s) {
       clusters: alloc.clusters,
       nCompleters: Math.round(alloc.completers.reduce((acc, v) => acc + v, 0)),
       nContrastCompleters: Math.round(n1 + n2),
+      withinCluster: isWithin(contrast),
+      mixedCluster: Boolean(contrast.pooled) && hybrid,
       varianceReduction: (1 - measurementVarianceMultiplier) * 100,
       // Kept for the two-arm summary cards.
       nTreatmentClusters: alloc.clusters[0],
@@ -456,14 +644,12 @@ export function createModel(s) {
 
   function retention(totalN, contrast) {
     const alloc = allocation(totalN);
-    const [n1, n2] = pairOf(alloc, contrast, "randomized");
-    const designEffect =
-      (1 + (s.patientsPerCluster - 1) * s.iccRetention) *
-      (1 + s.clusterSizeCV * s.clusterSizeCV);
     const p0 = s.controlAttrition;
 
-    const baseSE = Math.sqrt(p0 * (1 - p0) * (1 / n1 + 1 / n2));
-    const clusteredSE = baseSE * Math.sqrt(designEffect);
+    // The clustering term is folded into the inverse-N factor so a within-cluster
+    // contrast can drop the between-clinician variance.
+    const invN = contrastFactor(alloc, contrast, s.iccRetention, "randomized");
+    const clusteredSE = Math.sqrt(p0 * (1 - p0) * invN);
     const adjustedSE = clusteredSE * Math.sqrt(1 - s.r2Retention);
     const survivalSE = adjustedSE / Math.sqrt(s.survivalEfficiency);
 
@@ -480,6 +666,8 @@ export function createModel(s) {
       crit: z,
       critMethod: method,
       nClusters: alloc.nClusters,
+      withinCluster: isWithin(contrast),
+      mixedCluster: Boolean(contrast.pooled) && hybrid,
     };
   }
 
@@ -494,7 +682,12 @@ export function createModel(s) {
     const alloc = allocation(totalN);
     const idx = iccArmKeys.map((k) => armIndex[k]);
     const nPatients = idx.reduce((acc, i) => acc + alloc.completers[i], 0);
-    const nClustersIcc = idx.reduce((acc, i) => acc + alloc.clusters[i], 0);
+    // Dedupe by randomization unit: under hybrid two contributing arms can live in the
+    // same clinicians, and counting those clinicians twice would understate the design
+    // effect. (Spreading the same patients over more clinicians genuinely helps here.)
+    const nClustersIcc = [
+      ...new Set(idx.map((i) => arms[i].clusterGroup)),
+    ].reduce((acc, g) => acc + alloc.groupClusters[g], 0);
 
     const nObservations = nPatients * s.nFollowups;
     const avgObsPerCluster = nObservations / nClustersIcc;
@@ -533,6 +726,9 @@ export function createModel(s) {
     const alloc = allocation(totalN);
     const idx = iccArmKeys.map((k) => armIndex[k]);
     const nUsers = idx.reduce((acc, i) => acc + alloc.randomized[i], 0);
+    const nClustersUsed = [
+      ...new Set(idx.map((i) => arms[i].clusterGroup)),
+    ].reduce((acc, g) => acc + alloc.groupClusters[g], 0);
 
     // Round the focal group once and take the remainder, rather than rounding both
     // independently - otherwise the two displayed counts can sum to one more than the
@@ -554,8 +750,12 @@ export function createModel(s) {
     // one used for the HAM-D outcome: this analysis uses everyone's baseline responses, so
     // the clusters really are `patientsPerCluster` big. Borrowing the HAM-D design effect
     // here would pair a full-sample N with a shrunken cluster size and understate the SE.
+    // Effective cluster size is the AURORA users per contributing clinician, which is
+    // patientsPerCluster under cluster randomization but lower under hybrid, where a
+    // no-ROM clinician contributes only its app-only patients.
+    const usersPerCluster = nUsers / nClustersUsed;
     const designEffect =
-      (1 + (s.patientsPerCluster - 1) * s.iccHamd) *
+      (1 + (usersPerCluster - 1) * s.iccHamd) *
       (1 + s.clusterSizeCV * s.clusterSizeCV);
 
     const seRaw = Math.sqrt(1 / (nFocal * info) + 1 / (nReference * info));

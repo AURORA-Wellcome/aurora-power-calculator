@@ -30,6 +30,10 @@ const CONTRAST_COLORS = {
   AC: "#2a78d6",
   BC: "#eb6834",
   AB: "#1baf7a",
+  // The pooled contrast is an alternative presentation of the same data, not a fourth
+  // series, so it takes secondary ink rather than a categorical hue - which also avoids
+  // adding a 4th chart colour that has not been validated for colourblind separation.
+  PC: "#52514e",
 };
 // Comparison lines (sum-score baseline, two-arm baseline) stay in gray ink so they never
 // compete with the contrast series; they are told apart by dash pattern and weight.
@@ -136,6 +140,7 @@ export default function PowerCurves() {
     difThresholdN,
     difTargetLogits,
     difItemInfo,
+    randomization,
   } = settings;
 
   const threeArm = designArms === 3;
@@ -284,13 +289,17 @@ export default function PowerCurves() {
   // The charts plot either the MDE (what could be declared significant) or the confidence
   // interval half-width (how precisely the effect will be estimated). Under an exploratory
   // framing the second is the one that justifies the sample size.
+  // Charts show the pairwise decomposition. The pooled contrast answers a different
+  // question ("does AURORA in any form help?") and is reported in the cards and table
+  // rather than drawn as a fourth line competing with the decomposition.
+  const chartContrasts = contrasts.filter((c) => c.family !== "pooled");
   const showPrecision = chartMetric === "precision";
   const metricKey = showPrecision ? "ciHalfWidth" : "mde";
 
   const powerData = useMemo(() => {
     return sweep.map((n) => {
       const row = { n, clusters: Math.round(n / patientsPerCluster) };
-      contrasts.forEach((c) => {
+      chartContrasts.forEach((c) => {
         row[`hamd_${c.id}`] = model.hamd(n, c)[metricKey];
         row[`ret_${c.id}`] = model.retention(n, c)[metricKey];
       });
@@ -314,6 +323,7 @@ export default function PowerCurves() {
     sweep,
     metricKey,
     showPrecision,
+    chartContrasts,
   ]);
 
   // Scale the y-axes to the data rather than to a fixed ceiling, so adding contrasts (or
@@ -323,7 +333,7 @@ export default function PowerCurves() {
     let h = 0;
     let r = 0;
     for (const row of powerData) {
-      for (const c of contrasts) {
+      for (const c of chartContrasts) {
         h = Math.max(h, row[`hamd_${c.id}`]);
         r = Math.max(r, row[`ret_${c.id}`]);
       }
@@ -333,7 +343,7 @@ export default function PowerCurves() {
       Math.max(showPrecision ? 3 : 4, Math.ceil(h * 1.15)),
       Math.max(showPrecision ? 10 : 15, Math.ceil((r * 1.15) / 5) * 5),
     ];
-  }, [powerData, contrasts, showPrecision]);
+  }, [powerData, chartContrasts, showPrecision]);
 
   const rCode = useMemo(() => buildRCode(settings), [settings]);
 
@@ -495,6 +505,9 @@ export default function PowerCurves() {
                   </div>
                   <div className="text-gray-400">
                     crit {h.crit.toFixed(3)} · {h.critMethod}
+                    {h.withinCluster && (
+                      <span className="text-teal-600"> · within-clinician</span>
+                    )}
                   </div>
                 </div>
               );
@@ -588,11 +601,27 @@ export default function PowerCurves() {
           {threeArm ? (
             <>
               <div>
+                <label className={labelCls}>Randomization</label>
+                <select
+                  value={randomization}
+                  onChange={(e) => set("randomization")(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="hybrid">Hybrid (cluster + individual)</option>
+                  <option value="cluster">Cluster only</option>
+                </select>
+              </div>
+              <div>
                 <label className={labelCls}>Allocation (A : B : C)</label>
                 <div className="flex gap-1 mb-1">
                   {[
-                    ["1:1:1", [1, 1, 1], "Balanced"],
-                    ["2:2:1", [2, 2, 1], "Psychometric-weighted"],
+                    ["B.1", [1, 1, 1], "33/33/33 — even allocation"],
+                    ["B.2", [2, 1, 1], "50/25/25 — measurement-protective"],
+                    [
+                      "B.3",
+                      [4, 3, 3],
+                      "40/30/30 — recommended: matches 45/27.5/27.5 on the binding contrast and beats it elsewhere",
+                    ],
                   ].map(([name, w, hint]) => {
                     const active =
                       allocA === w[0] && allocB === w[1] && allocC === w[2];
@@ -695,15 +724,39 @@ export default function PowerCurves() {
           )}
         </div>
 
+        {threeArm && randomization === "hybrid" && (
+          <div className="mt-2 text-xs text-gray-600 bg-blue-50 rounded p-2">
+            <span className="font-medium">Hybrid randomization:</span>{" "}
+            clinicians are randomized to ROM vs no-ROM (
+            {currentAlloc.groupClusters[0]} vs {currentAlloc.groupClusters[1]}),
+            then patients inside no-ROM clinicians are individually randomized
+            to app-only vs TAU. That makes{" "}
+            <span className="font-medium">
+              app-only vs TAU a within-clinician contrast
+            </span>
+            , so the between-clinician variance cancels from it — the reason the
+            memo calls hybrid strictly superior. Assumes no spillover between
+            app-only and TAU patients sharing a clinician, which is not modelled
+            here.
+          </div>
+        )}
         <div className="mt-2 text-xs text-gray-500">
           Cluster split:{" "}
           <span className="font-medium text-gray-700">
-            {model.arms
-              .map((a, i) => `${a.label} ${currentAlloc.clusters[i]}`)
-              .join(" · ")}
+            {threeArm && randomization === "hybrid"
+              ? // Under hybrid, arms B and C occupy the SAME clinicians, so listing a
+                // count per arm would imply more clinicians than exist. Report the
+                // randomization units instead, then how each no-ROM panel divides.
+                `ROM ${currentAlloc.groupClusters[0]} · no-ROM ${currentAlloc.groupClusters[1]}`
+              : model.arms
+                  .map((a, i) => `${a.label} ${currentAlloc.clusters[i]}`)
+                  .join(" · ")}
           </span>{" "}
-          ({currentAlloc.nClusters} clinicians). Critical value for the shown
-          contrast:{" "}
+          ({currentAlloc.nClusters} clinicians
+          {threeArm && randomization === "hybrid"
+            ? `; each no-ROM panel splits ${Math.round(currentAlloc.armClusterSize[1] * 10) / 10} app-only / ${Math.round(currentAlloc.armClusterSize[2] * 10) / 10} TAU`
+            : ""}
+          ). Critical value for the shown contrast:{" "}
           <span className="font-medium text-gray-700">{critLabel}</span>.
           {threeArm && multiplicity === "dunnett" && (
             <>
@@ -756,6 +809,7 @@ export default function PowerCurves() {
               <option value={80}>80</option>
               <option value={90}>90</option>
               <option value={100}>100</option>
+              <option value={110}>110</option>
               <option value={120}>120</option>
               <option value={140}>140</option>
               <option value={150}>150</option>
@@ -821,6 +875,18 @@ export default function PowerCurves() {
             df = {model.dfFor(currentN)} (clusters − arms)
           </div>
         </div>
+        {threeArm &&
+          !exploratory &&
+          multiplicity === "dunnett" &&
+          randomization === "hybrid" && (
+            <div className="mt-2 text-xs text-amber-700">
+              Note: under hybrid randomization the Dunnett correlation structure
+              is only approximate — app-only vs TAU is a within-clinician
+              contrast with a smaller variance than clinician+patient vs TAU, so
+              the true critical value is slightly higher than shown. Bonferroni
+              is the conservative choice here.
+            </div>
+          )}
         {smallSampleT &&
           threeArm &&
           !exploratory &&
@@ -1377,7 +1443,7 @@ export default function PowerCurves() {
                   name={`2-arm (${treatmentRatio}:1) baseline`}
                 />
               )}
-              {contrasts.map((c) => (
+              {chartContrasts.map((c) => (
                 <Line
                   key={c.id}
                   type="monotone"
@@ -1503,7 +1569,7 @@ export default function PowerCurves() {
               {threeArm && (
                 <Legend verticalAlign="top" height={28} iconSize={10} />
               )}
-              {contrasts.map((c) => (
+              {chartContrasts.map((c) => (
                 <Line
                   key={c.id}
                   type="monotone"

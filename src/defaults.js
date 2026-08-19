@@ -10,6 +10,11 @@ export const defaults = {
 
   // Design
   designArms: 2,
+  // "hybrid" randomizes clinicians to ROM vs no-ROM, then randomizes patients WITHIN
+  // no-ROM clinicians to app-only vs TAU. That makes app-only vs TAU a within-clinician
+  // comparison, which removes the between-clinician variance from that contrast. Only
+  // meaningful for the three-arm design; ignored when designArms is 2.
+  randomization: "hybrid",
   treatmentRatio: 3,
   allocA: 1,
   allocB: 1,
