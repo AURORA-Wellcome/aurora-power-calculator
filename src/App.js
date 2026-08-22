@@ -141,6 +141,7 @@ export default function PowerCurves() {
     difTargetLogits,
     difItemInfo,
     randomization,
+    mixedShare,
   } = settings;
 
   const threeArm = designArms === 3;
@@ -268,6 +269,10 @@ export default function PowerCurves() {
   const currentIcc = model.icc(currentN);
   const currentAlloc = model.allocation(currentN);
   const currentDif = model.dif(currentN);
+  const currentSpill = model.spillover(currentN);
+  const SPILL_SHARES = [0, 0.1, 0.15, 0.2, 0.25, 0.3];
+  // The M=0 primary is the reference the cost column is measured against.
+  const spillBase = model.spillover(currentN, 0).primary;
   const currentPower = model.hamdPower(currentN, activeContrast, assumedEffect);
 
   // What the same total N would buy under the two-arm design.
@@ -1227,6 +1232,147 @@ export default function PowerCurves() {
             : " Treatment arm only."}
         </div>
       </div>
+
+      {/* Spillover substudy */}
+      {threeArm && (
+        <div className={cardCls}>
+          <h2 className="font-semibold mb-1 text-sm md:text-base">
+            Spillover Substudy (mixed panels)
+          </h2>
+          <p className="text-xs text-gray-500 mb-3">
+            A third clinician type: ROM-trained with the dashboard, but only
+            some of their patients on it. Comparing the same arm across
+            clinician types isolates spillover of the clinician&apos;s training
+            onto patients who are not on the dashboard. The overall arm
+            allocation is unchanged at every setting; only the arrangement of
+            patients across clinicians changes.
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3">
+            <div>
+              <label className={labelCls}>
+                Mixed panels: {currentSpill.M} of {currentAlloc.nClusters}{" "}
+                clinicians
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="0.35"
+                step="0.05"
+                value={mixedShare}
+                onChange={(e) => set("mixedShare")(parseFloat(e.target.value))}
+                className="w-full"
+              />
+              <div className="text-xs text-gray-400">
+                0 = current design, no spillover estimate
+              </div>
+            </div>
+            <div className="text-xs text-gray-600 col-span-3 flex items-center">
+              <div>
+                <div>
+                  <span className="font-medium">Clinician split:</span>{" "}
+                  {currentSpill.P} pure-ROM / {currentSpill.M} mixed /{" "}
+                  {currentSpill.K} no-ROM
+                </div>
+                <div>
+                  <span className="font-medium">Mixed panel:</span>{" "}
+                  {currentSpill.panelMixed
+                    .map(
+                      (x, i) =>
+                        `${Math.round(x * 10) / 10} ${model.arms[i].short}`,
+                    )
+                    .join(" / ")}
+                  {"  ·  "}
+                  <span className="font-medium">No-ROM panel:</span>{" "}
+                  {currentSpill.panelNoRom
+                    .map(
+                      (x, i) =>
+                        `${Math.round(x * 10) / 10} ${model.arms[i + 1].short}`,
+                    )
+                    .join(" / ")}
+                </div>
+                <div className="text-gray-400">
+                  Patients per arm: {currentSpill.patients.join(" / ")}{" "}
+                  (unchanged by this setting)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+            <table className="w-full text-xs md:text-sm min-w-[640px] tabular-nums">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-1.5 md:p-2">Mixed</th>
+                  <th className="text-left p-1.5 md:p-2">
+                    pure / mixed / no-ROM
+                  </th>
+                  <th className="text-left p-1.5 md:p-2">A vs C (clean)</th>
+                  <th className="text-left p-1.5 md:p-2">vs M=0</th>
+                  <th className="text-left p-1.5 md:p-2">Spillover pooled</th>
+                  <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
+                    onto B
+                  </th>
+                  <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
+                    onto C
+                  </th>
+                  <th className="text-left p-1.5 md:p-2 hidden lg:table-cell">
+                    Direct A effect
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {SPILL_SHARES.map((sh) => {
+                  const r = model.spillover(currentN, sh);
+                  const key = showPrecision ? "ciHalfWidth" : "mde";
+                  const dkey = showPrecision ? "ciEffectSize" : "effectSize";
+                  const fmt = (o2) =>
+                    Number.isFinite(o2[key])
+                      ? `${o2[key].toFixed(2)} (${o2[dkey].toFixed(2)})`
+                      : "—";
+                  const cost = (
+                    (r.primary[key] / spillBase[key] - 1) *
+                    100
+                  ).toFixed(0);
+                  return (
+                    <tr
+                      key={sh}
+                      className={`border-b ${sh === mixedShare ? "bg-blue-50 font-semibold" : ""}`}
+                    >
+                      <td className="p-1.5 md:p-2">{r.M}</td>
+                      <td className="p-1.5 md:p-2">
+                        {r.P} / {r.M} / {r.K}
+                      </td>
+                      <td className="p-1.5 md:p-2">{fmt(r.primary)}</td>
+                      <td className="p-1.5 md:p-2 text-orange-600">
+                        {sh === 0 ? "—" : `+${cost}%`}
+                      </td>
+                      <td className="p-1.5 md:p-2">{fmt(r.spilloverPooled)}</td>
+                      <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                        {fmt(r.spilloverB)}
+                      </td>
+                      <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                        {fmt(r.spilloverC)}
+                      </td>
+                      <td className="p-1.5 md:p-2 hidden lg:table-cell text-gray-500">
+                        {fmt(r.directEffect)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Values are {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"}{" "}
+            in HAM-D points, with Cohen&apos;s d in brackets. The per-path
+            estimates (onto B, onto C) are much weaker than the pooled one;
+            treat them as descriptive and pre-specify the pooled test. Spillover
+            should attenuate the treatment effect, so an estimate with the
+            opposite sign is noise rather than a finding.
+          </p>
+        </div>
+      )}
 
       {/* Fairness / DIF substudy */}
       <div className={cardCls}>

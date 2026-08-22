@@ -71,6 +71,7 @@ export const SETTING_SPEC = {
   difTargetLogits: { type: "number", min: 0.01, max: 5 },
   difItemInfo: { type: "number", min: 0.01, max: 5 },
   randomization: { type: "enum", values: ["cluster", "hybrid"] },
+  mixedShare: { type: "number", min: 0, max: 0.6 },
 };
 
 // APPEND-ONLY. Adding a setting means pushing it onto the end; older (shorter) tokens

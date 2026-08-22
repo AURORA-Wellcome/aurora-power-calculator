@@ -58,6 +58,11 @@ export const defaults = {
   raschReliability: 0.91,
   raterVarianceProp: 0.07,
 
+  // Spillover substudy: share of clinicians running a MIXED panel (some patients on the
+  // dashboard, some not). 0 disables it, which is the current design. Only meaningful in
+  // the three-arm design. The overall arm allocation is invariant to this.
+  mixedShare: 0,
+
   // Fairness / DIF substudy (Aim 2: "fair"). Only AURORA users generate item responses.
   // Share of the sample in the SMALLEST subgroup on the fairness dimension being tested
   // (ethnicity, language, gender, age band) - the smallest group is always the binding

@@ -819,7 +819,12 @@ section("7. Shipped defaults");
     const dm = createModel(defaults);
     const sum = createModel({ ...defaults, measurementModel: "sum" });
     const c = dm.contrasts[0];
-    close("MFRM variance multiplier", dm.measurementVarianceMultiplier, 0.8835, 1e-9);
+    close(
+      "MFRM variance multiplier",
+      dm.measurementVarianceMultiplier,
+      0.8835,
+      1e-9,
+    );
     const gain = 1 - dm.hamd(1000, c).mde / sum.hamd(1000, c).mde;
     close("MFRM improves the MDE ~6% vs sum score", gain, 0.06, 0.005);
     ok(
@@ -1000,7 +1005,11 @@ section("7b. Hybrid cluster-individual randomization");
   {
     // Sum score pinned locally: this checks the clustering algebra, and the default
     // MFRM multiplier would otherwise have to be threaded through the expected value.
-    const hySum = createModel({ ...base, randomization: "hybrid", measurementModel: "sum" });
+    const hySum = createModel({
+      ...base,
+      randomization: "hybrid",
+      measurementModel: "sum",
+    });
     const a = hySum.allocation(N);
     const BC = pick(hySum, "BC");
     const h = hySum.hamd(N, BC);
@@ -1284,11 +1293,19 @@ section("7d. Effect sizes (Cohen's d and h)");
     const h = m.hamd(N, c);
     const r = m.retention(N, c);
     close(`[${c.short}] d = MDE / 7`, h.effectSize, h.mde / 7, 1e-12);
-    close(`[${c.short}] CI d = CI half-width / 7`, h.ciEffectSize, h.ciHalfWidth / 7, 1e-12);
+    close(
+      `[${c.short}] CI d = CI half-width / 7`,
+      h.ciEffectSize,
+      h.ciHalfWidth / 7,
+      1e-12,
+    );
     close(
       `[${c.short}] retention h matches its two rates`,
       r.effectSizeH,
-      cohensH(defaults.controlAttrition, defaults.controlAttrition - r.mde / 100),
+      cohensH(
+        defaults.controlAttrition,
+        defaults.controlAttrition - r.mde / 100,
+      ),
       1e-12,
     );
     ok(
@@ -1311,6 +1328,177 @@ section("7d. Effect sizes (Cohen's d and h)");
       "larger N gives a smaller detectable h",
       small.retention(1500, c(small)).effectSizeH <
         big.retention(600, c(big)).effectSizeH,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("7e. Spillover substudy (mixed panels)");
+// ---------------------------------------------------------------------------
+
+{
+  const mk = (o) =>
+    createModel({
+      ...defaults,
+      designArms: 3,
+      randomization: "hybrid",
+      allocA: 4,
+      allocB: 3,
+      allocC: 3,
+      nClinicians: 100,
+      ...o,
+    });
+  const m = mk({});
+  const N = 1000;
+
+  // THE property the design rests on: M changes only the ARRANGEMENT of patients across
+  // clinicians, never the arm allocation. If this fails, the design is not free.
+  {
+    const ref = m.spillover(N, 0);
+    let allSame = true,
+      allJ = true;
+    const seen = [];
+    for (const sh of [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]) {
+      const r = m.spillover(N, sh);
+      seen.push(`${r.M}:[${r.patients}]`);
+      if (r.patients.some((x, i) => Math.abs(x - ref.patients[i]) > 1))
+        allSame = false;
+      if (Math.abs(r.totalClinicians - 100) > 1) allJ = false;
+    }
+    ok(
+      "arm allocation is invariant to M",
+      allSame,
+      seen.slice(0, 4).join("  "),
+    );
+    ok("clinician total is invariant to M", allJ);
+    ok(
+      "allocation matches the 40/30/30 target",
+      ref.patients[0] === 400 &&
+        ref.patients[1] === 300 &&
+        ref.patients[2] === 300,
+      ref.patients.join("/"),
+    );
+  }
+
+  // Panel compositions follow the allocation.
+  {
+    const r = m.spillover(N, 0.2);
+    close(
+      "mixed panel is 4/3/3 of 10",
+      r.panelMixed.reduce((a, b) => a + b, 0),
+      10,
+      1e-12,
+    );
+    close("mixed panel A share", r.panelMixed[0], 4, 1e-12);
+    close("no-ROM panel is 5/5 of 10", r.panelNoRom[0], 5, 1e-12);
+    ok("P + M + K = J", r.P + r.M + r.K === 100, `${r.P}+${r.M}+${r.K}`);
+  }
+
+  // At M=0 there is nothing to compare against, so no spillover estimate exists.
+  {
+    const r = m.spillover(N, 0);
+    ok(
+      "M=0 gives no spillover estimate",
+      !Number.isFinite(r.spilloverPooled.mde),
+    );
+    ok(
+      "M=0 gives no direct-effect estimate",
+      !Number.isFinite(r.directEffect.mde),
+    );
+    ok(
+      "M=0 primary is finite",
+      Number.isFinite(r.primary.mde),
+      r.primary.mde.toFixed(3),
+    );
+  }
+
+  // The trade-off: primary degrades monotonically, spillover improves.
+  {
+    let primUp = true,
+      spillDown = true;
+    let prevP = 0,
+      prevS = Infinity;
+    for (const sh of [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]) {
+      const r = m.spillover(N, sh);
+      if (r.primary.mde < prevP) primUp = false;
+      if (sh > 0.05 && r.spilloverPooled.mde > prevS) spillDown = false;
+      prevP = r.primary.mde;
+      prevS = r.spilloverPooled.mde;
+    }
+    ok("primary contrast degrades monotonically with M", primUp);
+    ok("pooled spillover improves with M", spillDown);
+  }
+
+  // Pooling the two spillover paths must beat either alone - that is why it is the
+  // pre-specified test.
+  {
+    const r = m.spillover(N, 0.2);
+    ok(
+      "pooled spillover beats each single path",
+      r.spilloverPooled.mde < r.spilloverB.mde &&
+        r.spilloverPooled.mde < r.spilloverC.mde,
+      `pooled ${r.spilloverPooled.mde.toFixed(2)} vs B ${r.spilloverB.mde.toFixed(2)} / C ${r.spilloverC.mde.toFixed(2)}`,
+    );
+    // B and C paths are symmetric under 40/30/30 since both arms get 30%.
+    close(
+      "B and C paths symmetric at equal allocation",
+      r.spilloverB.mde,
+      r.spilloverC.mde,
+      1e-12,
+    );
+  }
+
+  // Effect sizes must be consistent with the points.
+  {
+    const r = m.spillover(N, 0.2);
+    close(
+      "primary d = MDE / 7",
+      r.primary.effectSize,
+      r.primary.mde / 7,
+      1e-12,
+    );
+    close(
+      "spillover CI d = CI / 7",
+      r.spilloverPooled.ciEffectSize,
+      r.spilloverPooled.ciHalfWidth / 7,
+      1e-12,
+    );
+    ok(
+      "CI half-width is narrower than the MDE",
+      r.primary.ciHalfWidth < r.primary.mde,
+    );
+  }
+
+  // The headline warning: at what M does the primary interval exceed the d=0.15 effect
+  // the literature expects? Pin it so the trade-off cannot drift unnoticed.
+  {
+    const under = [];
+    for (const sh of [0, 0.1, 0.15, 0.2, 0.25, 0.3]) {
+      const r = m.spillover(N, sh);
+      if (r.primary.ciEffectSize < 0.15) under.push(sh);
+    }
+    ok(
+      "primary CI stays inside d=0.15 only at low M",
+      under.length > 0 && under[under.length - 1] <= 0.15,
+      `shares keeping d<0.15: ${under.join(", ")}`,
+    );
+  }
+
+  // Off in two-arm mode.
+  {
+    const t2 = createModel({ ...defaults, designArms: 2, mixedShare: 0.2 });
+    const r = t2.spillover(1000);
+    ok(
+      "two-arm spillover is flagged unavailable",
+      r.available === false,
+      String(r.available),
+    );
+    ok("two-arm spillover reports no mixed panels", r.M === 0, `M=${r.M}`);
+    ok(
+      "two-arm spillover returns no NaN",
+      [r.primary.mde, r.spilloverPooled.mde, r.directEffect.mde].every(
+        (x) => !Number.isNaN(x),
+      ),
     );
   }
 }

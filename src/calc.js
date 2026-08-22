@@ -813,11 +813,145 @@ export function createModel(s) {
     };
   }
 
+  // --- Spillover substudy (mixed panels) -----------------------------------
+
+  // A THIRD clinician type: ROM-trained, dashboard in hand, but only some of their
+  // patients on it. Their panel carries all three conditions; the rest of their patients
+  // are app-only or TAU and are invisible to the dashboard.
+  //
+  //   pure-ROM (P)  every patient on the dashboard          -> all arm A
+  //   mixed    (M)  panel split across all three conditions -> A, B and C
+  //   no-ROM   (K)  never trained                           -> B and C
+  //
+  // Spillover is identified by comparing the SAME arm across clinician types: a B patient
+  // of a mixed clinician gets exactly what a B patient of a no-ROM clinician gets, except
+  // that their clinician has been changed by ROM. Any outcome gap is spillover.
+  //
+  // Panels are split proportionally to the target allocation, which makes the overall
+  // allocation invariant to M. Writing pA for arm A's share:
+  //
+  //   P = pA (J - M),  K = (1 - pA)(J - M),  so P + M + K = J for any M,
+  //   A patients = P m + M (m pA) = pA J m,  unchanged. Same for B and C.
+  //
+  // So M is a free dial: it changes only how patients are ARRANGED across clinicians,
+  // never how many are in each arm.
+  // shareOverride lets the UI sweep M without rebuilding the model for each row.
+  function spillover(totalN, shareOverride) {
+    const share = shareOverride === undefined ? s.mixedShare : shareOverride;
+    const alloc = allocation(totalN);
+    // Needs three arms: a mixed panel has to carry a dashboard condition, an app-only
+    // condition and a control condition. With two arms there is no app-only arm to
+    // spill onto, so return an inert result rather than propagating NaN.
+    const none = {
+      se: Infinity,
+      mde: Infinity,
+      effectSize: Infinity,
+      ciHalfWidth: Infinity,
+      ciEffectSize: Infinity,
+    };
+    if (arms.length < 3) {
+      return {
+        M: 0,
+        P: alloc.nClusters,
+        K: 0,
+        panelMixed: [],
+        panelNoRom: [],
+        totalClinicians: alloc.nClusters,
+        patients: alloc.randomized.map(Math.round),
+        available: false,
+        primary: none,
+        spilloverB: none,
+        spilloverC: none,
+        spilloverPooled: none,
+        directEffect: none,
+      };
+    }
+    const J = alloc.nClusters;
+    const m = s.patientsPerCluster;
+    const keep = 1 - s.controlAttrition;
+    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
+    const rho = s.iccHamd;
+    const de = (size) => (1 + (size * keep - 1) * rho) * cvAdj;
+    const betw = (Jk, nk) =>
+      Jk > 0 && nk > 0 ? de(nk / (Jk * keep)) / nk : Infinity;
+
+    const w = arms.map((a) => a.weight);
+    const sumW = w.reduce((x, y) => x + y, 0);
+    const [pA, pB, pC] = w.map((x) => x / sumW);
+
+    const M = Math.round(share * J);
+    const P = pA * (J - M);
+    const K = (1 - pA) * (J - M);
+
+    // Panel compositions.
+    const mixA = m * pA,
+      mixB = m * pB,
+      mixC = m * pC;
+    const noB = (m * pB) / (pB + pC),
+      noC = (m * pC) / (pB + pC);
+
+    // Completer counts per cell.
+    const nA_pure = P * m * keep,
+      nA_mix = M * mixA * keep;
+    const nB_mix = M * mixB * keep,
+      nB_no = K * noB * keep;
+    const nC_mix = M * mixC * keep,
+      nC_no = K * noC * keep;
+
+    const { netVariance } = hamdVariance();
+    const { z } = critInfo(contrasts[0], totalN);
+    const mult = z + zBeta;
+    const out = (factor) => {
+      const se = Math.sqrt(netVariance * factor);
+      return {
+        se,
+        mde: mult * se,
+        effectSize: (mult * se) / SIGMA_HAMD,
+        ciHalfWidth: z * se,
+        ciEffectSize: (z * se) / SIGMA_HAMD,
+      };
+    };
+
+    return {
+      M,
+      P: Math.round(P),
+      K: Math.round(K),
+      panelMixed: [mixA, mixB, mixC],
+      panelNoRom: [noB, noC],
+      totalClinicians: Math.round(P) + M + Math.round(K),
+      // Allocation must be untouched by M; exposed so the UI can prove it.
+      patients: [
+        Math.round(nA_pure / keep + nA_mix / keep),
+        Math.round(nB_mix / keep + nB_no / keep),
+        Math.round(nC_mix / keep + nC_no / keep),
+      ],
+      // Primary contrast kept clean: only clinicians with no dashboard exposure supply
+      // the controls, and only fully-exposed clinicians supply the treated patients.
+      primary: out(betw(P, nA_pure) + betw(K, nC_no)),
+      spilloverB: out(betw(M, nB_mix) + betw(K, nB_no)),
+      spilloverC: out(betw(M, nC_mix) + betw(K, nC_no)),
+      spilloverPooled: out(betw(M, nB_mix + nC_mix) + betw(K, nB_no + nC_no)),
+      // Within a mixed panel the clinician effect is shared, so this isolates the
+      // patient-specific part of the ROM effect from any general practice change.
+      directEffect:
+        M > 0
+          ? out((1 - rho) * (1 / nA_mix + 1 / nC_mix))
+          : {
+              se: Infinity,
+              mde: Infinity,
+              effectSize: Infinity,
+              ciHalfWidth: Infinity,
+              ciEffectSize: Infinity,
+            },
+    };
+  }
+
   return {
     arms,
     contrasts,
     allocation,
     dif,
+    spillover,
     hamd,
     hamdPower,
     retention,

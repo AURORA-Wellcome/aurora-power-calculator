@@ -128,6 +128,31 @@ model accounts for:
   value slightly higher. The default exploratory framing applies no adjustment, so this
   only matters under a confirmatory framing, where Bonferroni is the conservative choice.
 
+## Spillover substudy
+
+Setting `mixedShare` above zero introduces a third clinician type: ROM-trained, dashboard
+in hand, but with only some of their patients on it. Comparing the *same arm* across
+clinician types identifies spillover of the clinician's training onto patients who are not
+on the dashboard, which the parallel design has to assume away.
+
+Panels are split proportionally to the target allocation, which makes the arm allocation
+invariant to the number of mixed panels. Writing `pA` for arm A's share:
+
+```
+P = pA (J - M),   K = (1 - pA)(J - M),   so P + M + K = J for any M
+A patients = P m + M (m pA) = pA J m,    unchanged; same for B and C
+```
+
+So the dial changes only how patients are *arranged* across clinicians, never how many are
+in each arm. The cost is that the clean primary contrast draws on fewer pure-ROM and
+no-ROM clinicians, which widens its interval; the panel reports that cost per row.
+
+Caveats worth carrying into a protocol: the per-path estimates (onto app-only, onto TAU)
+are much weaker than the pooled one and should be treated as descriptive; spillover should
+attenuate the treatment effect, so an estimate of the opposite sign is noise; and a mixed
+panel needs the full patients-per-clinician target to preserve its three-way split, which
+makes the design fragile to under-recruitment and hard to run at sites with few clinicians.
+
 ## The pooled contrast
 
 `A+B vs C` is not a merged arm run through the pairwise machinery. Under hybrid the pooled
