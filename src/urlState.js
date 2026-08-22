@@ -19,6 +19,7 @@
 // blank the page.
 
 import { defaults } from "./defaults.js";
+import { parseRoster } from "./sites.js";
 
 export const TOKEN_PARAM = "c";
 const VERSION = "1";
@@ -72,6 +73,13 @@ export const SETTING_SPEC = {
   difItemInfo: { type: "number", min: 0.01, max: 5 },
   randomization: { type: "enum", values: ["cluster", "hybrid"] },
   mixedShare: { type: "number", min: 0, max: 0.6 },
+  // Free-form, so it needs a pattern as well as a length bound. "." and "-" both survive
+  // URLSearchParams untouched, which is why the roster uses them as separators.
+  // Validated by the roster parser itself rather than by a pattern here, so the codec
+  // and the model cannot disagree about what counts as a valid roster. The parser also
+  // enforces what a regex cannot: every site needs at least as many patients as
+  // clinicians.
+  siteRoster: { type: "string", maxLength: 400, validate: parseRoster },
 };
 
 // APPEND-ONLY. Adding a setting means pushing it onto the end; older (shorter) tokens
@@ -83,6 +91,8 @@ export const FIELD_ORDER = Object.keys(SETTING_SPEC);
 
 function encodeValue(spec, value) {
   switch (spec.type) {
+    case "string":
+      return typeof value === "string" ? value : "";
     case "enum": {
       const i = spec.values.indexOf(value);
       return i < 0 ? "" : String(i);
@@ -115,6 +125,12 @@ function decodeValue(spec, raw) {
       if (spec.type === "int" && !Number.isInteger(n)) return undefined;
       if (n < spec.min || n > spec.max) return undefined;
       return n;
+    }
+    case "string": {
+      if (typeof raw !== "string") return undefined;
+      if (spec.maxLength && raw.length > spec.maxLength) return undefined;
+      if (spec.validate && spec.validate(raw) === null) return undefined;
+      return raw;
     }
     default:
       return undefined;

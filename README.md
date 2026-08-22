@@ -128,6 +128,37 @@ model accounts for:
   value slightly higher. The default exploratory framing applies no adjustment, so this
   only matters under a confirmatory framing, where Bonferroni is the conservative choice.
 
+## Site-stratified randomization
+
+Clinicians are randomized **within site** (11 sites, eTable 1 of the design memo), so the
+calculator allocates per site and aggregates rather than apportioning one pool. Three
+consequences that are not apparent by inspection:
+
+- **Realized allocation drifts from nominal, in a direction that depends on the roster.**
+  B.3 40/30/30 comes out 42.3/57.7 at 111 clinicians but 38.0/62.0 at 100. Extreme ratios
+  drift most: 3:1 realizes as 77/23, because every site's exact split leaves a 0.75
+  fraction and largest-remainder awards the odd clinician to the larger arm each time.
+- **Exact ties must be rotated.** A 6-clinician site at 3:1 splits 4.5/1.5, a genuine tie.
+  Resolving it the same way at every site turned 75/25 into 79/21; `allocateClusters`
+  therefore takes a `tieBreak` index that rotates which arm wins, which recovers 77/23.
+- **Cell feasibility is non-monotonic.** At `mixedShare` 0.15 five sites get a single mixed
+  clinician; at 0.20 none do.
+
+Variance is pooled across strata by inverse variance, `1/V = SUM_s 1/V_s`. With one site
+this reduces exactly to the unstratified formula, which is why a one-site roster reproduces
+the pre-stratification numbers bit for bit — the property the regression checks rely on.
+
+### Why `clusterSizeCV` survives
+
+Cluster-size variation has two independent sources that add in quadrature,
+`CV_total^2 = CV_between^2 + CV_within^2`. The roster supplies only the first. Its panel
+sizes barely vary (nine sites at exactly 10 patients per clinician, two at 11), giving
+`CV_between = 0.038` and an inflation of 1.0014 against 1.04 for an assumed 0.2. The
+dominant term is clinicians differing from **each other within a site**, and a roster of
+planned targets holds no information about it. Replacing the parameter with the roster
+would make every MDE about 1.9% more optimistic by dropping a real variance component, so
+the parameter stays, relabelled as the within-site residual.
+
 ## Spillover substudy
 
 Setting `mixedShare` above zero introduces a third clinician type: ROM-trained, dashboard

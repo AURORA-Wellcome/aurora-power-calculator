@@ -37,8 +37,20 @@ export const defaults = {
   // Structure
   patientsPerCluster: 10,
   nClinicians: 100,
-  // Clinician panel sizes always vary in practice; equal clusters is an optimistic default.
+  // WITHIN-SITE cluster-size variation: how much clinicians at the same site differ from
+  // each other in panel size. The between-site component is computed from siteRoster and
+  // added in quadrature, so this parameter covers only the residual. It stays an
+  // assumption because a roster records planned targets, not realized recruitment spread,
+  // and that spread is by far the larger term (~0.2 assumed vs ~0.038 computed).
   clusterSizeCV: 0.2,
+
+  // Site roster as "patients-clinicians" per site, from eTable 1 of the design memo.
+  // Randomization is stratified by site, so allocation happens within each site and is
+  // then aggregated; that shifts the realized allocation away from the nominal one by an
+  // amount and direction that depend on the roster shape. The roster is rescaled to
+  // whatever nClinicians is set to, so planning at 100 against a real roster of 111 works.
+  siteRoster:
+    "140-14.140-14.140-14.140-14.110-10.110-10.70-7.70-7.70-7.70-7.70-7",
   controlAttrition: 0.3,
 
   // Outcomes

@@ -8,6 +8,18 @@
 // All arms are randomized at the clinician (cluster) level, so every contrast carries the
 // full clustering design effect.
 
+import {
+  allocateClusters,
+  rosterFromSettings,
+  scaleRoster,
+  allocateRoster,
+  cvBetween,
+} from "./sites.js";
+
+// allocateClusters lives in sites.js (it is the allocation primitive both modules need),
+// re-exported here so existing importers and tests are unaffected.
+export { allocateClusters };
+
 // ---------------------------------------------------------------------------
 // Normal distribution
 // ---------------------------------------------------------------------------
@@ -171,32 +183,6 @@ export function dunnettCrit(lambdas, alpha) {
     if (hi - lo < 1e-10) break;
   }
   return (lo + hi) / 2;
-}
-
-// ---------------------------------------------------------------------------
-// Cluster allocation
-// ---------------------------------------------------------------------------
-
-// Largest-remainder apportionment: the per-arm counts always sum exactly to the total.
-// 100 clinicians across 1:1:1 becomes 34/33/33, not three rounded 33.3s.
-// Ties in the fractional part are broken in favour of the earlier arm, which reproduces
-// the old two-arm `Math.round(nClusters * proportion)` behaviour exactly.
-export function allocateClusters(total, weights) {
-  const sumW = weights.reduce((a, b) => a + b, 0);
-  if (sumW <= 0) return weights.map(() => 0);
-
-  const exact = weights.map((w) => (total * w) / sumW);
-  const counts = exact.map(Math.floor);
-  let remaining = total - counts.reduce((a, b) => a + b, 0);
-
-  const order = exact
-    .map((e, i) => ({ i, frac: e - Math.floor(e) }))
-    .sort((x, y) => y.frac - x.frac); // stable: equal fractions keep arm order
-
-  for (let k = 0; remaining > 0; k++, remaining--) {
-    counts[order[k % order.length].i] += 1;
-  }
-  return counts;
 }
 
 // ---------------------------------------------------------------------------
@@ -447,6 +433,19 @@ export function createModel(s) {
 
   // Distinct randomization units. Under cluster randomization every arm has its own
   // clinicians; under hybrid, arms B and C share the no-ROM clinicians.
+  const roster = rosterFromSettings(s);
+
+  // Cluster-size variation has two independent sources and they add in quadrature:
+  //   between-site  - computed from the roster's panel sizes (known)
+  //   within-site   - clinicians differing from each other (assumed, s.clusterSizeCV)
+  // The roster cannot supply the second: it records planned targets, not realized
+  // recruitment spread, and the between-site term is far smaller (~0.038 vs ~0.2).
+  const cvSite = cvBetween(roster);
+  const cvTotal = Math.sqrt(
+    cvSite * cvSite + s.clusterSizeCV * s.clusterSizeCV,
+  );
+  const cvAdjTotal = 1 + cvTotal * cvTotal;
+
   const nGroups = Math.max(...arms.map((a) => a.clusterGroup)) + 1;
   const groupWeights = Array.from({ length: nGroups }, (_, g) =>
     arms
@@ -457,10 +456,14 @@ export function createModel(s) {
   function allocation(totalN) {
     const nClusters = Math.round(totalN / s.patientsPerCluster);
 
-    // Clinicians are apportioned across randomization UNITS, not arms. With hybrid that
-    // is [ROM, no-ROM]; with cluster randomization it is one unit per arm, which
-    // reproduces the original behaviour exactly.
-    const groupClusters = allocateClusters(nClusters, groupWeights);
+    // Randomization is stratified by SITE, so clinicians are apportioned within each site
+    // and then aggregated. That is not the same as apportioning one pool: largest-
+    // remainder rounding at each site shifts the realized allocation away from the
+    // nominal one, and the direction depends on the roster shape rather than being
+    // predictable. A single-site roster reproduces the one-pool behaviour exactly.
+    const sitesScaled = scaleRoster(roster, nClusters);
+    const perSite = allocateRoster(sitesScaled, groupWeights);
+    const groupClusters = perSite.aggregate;
 
     // Within a unit, patients split by the arms' relative weights. That share is 1 for a
     // cluster-randomized arm and b/(b+c) or c/(b+c) for the two hybrid patient-level arms.
@@ -478,6 +481,21 @@ export function createModel(s) {
     );
     const completers = randomized.map((n) => n * (1 - s.controlAttrition));
 
+    // Per-site breakdown, in the same arm-indexed shape as the aggregates, so a contrast
+    // can be evaluated stratum by stratum and pooled.
+    const sites = perSite.perSite.map((gc, si) => {
+      const cl = arms.map((a) => gc[a.clusterGroup]);
+      const rand = arms.map((a, i) => gc[a.clusterGroup] * armClusterSize[i]);
+      return {
+        name: sitesScaled[si].name,
+        nClusters: sitesScaled[si].clinicians,
+        groupClusters: gc,
+        clusters: cl,
+        randomized: rand,
+        completers: rand.map((n) => n * (1 - s.controlAttrition)),
+      };
+    });
+
     return {
       nClusters,
       groupClusters,
@@ -487,6 +505,9 @@ export function createModel(s) {
       armClusterSize,
       arms,
       hybrid: hybrid,
+      sites,
+      siteRoster: sitesScaled,
+      nominalGroupClusters: perSite.nominal,
     };
   }
 
@@ -516,21 +537,21 @@ export function createModel(s) {
   // (the pooled form being ~1.5% less inflated at CV = 0.2). The inherited formula is
   // kept for the pairwise path so the two-arm regression against the original
   // implementation continues to hold exactly.
-  function pooledFactor(alloc, contrast, icc, field) {
+  function pooledFactorOne(cells, alloc, contrast, icc, field) {
     const idx = contrast.pooled.map((k) => armIndex[k]);
     const ref = armIndex[contrast.b];
-    const ns = idx.map((i) => alloc[field][i]);
+    const ns = idx.map((i) => cells[field][i]);
     const total = ns.reduce((a, b) => a + b, 0);
     const w = ns.map((n) => n / total);
-    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
-    const J = (i) => alloc.clusters[i];
+    const cvAdj = cvAdjTotal;
+    const J = (i) => cells.clusters[i];
     const sameUnit = (i, j) => arms[i].clusterGroup === arms[j].clusterGroup;
 
     let between = 1 / J(ref);
-    let within = 1 / alloc[field][ref];
+    let within = 1 / cells[field][ref];
     idx.forEach((i, a) => {
       between += (w[a] * w[a]) / J(i);
-      within += (w[a] * w[a]) / alloc[field][i];
+      within += (w[a] * w[a]) / cells[field][i];
       if (sameUnit(i, ref)) between -= (2 * w[a]) / J(i);
     });
     for (let a = 0; a < idx.length; a++) {
@@ -546,12 +567,13 @@ export function createModel(s) {
   // Variance multiplier for a contrast: the sum of design-effect-weighted inverse sample
   // sizes. Returned separately from the outcome variance so each contrast can carry its
   // own clustering, which is the whole point of the hybrid design.
-  function contrastFactor(alloc, contrast, icc, field) {
-    if (contrast.pooled) return pooledFactor(alloc, contrast, icc, field);
+  function contrastFactorOne(cells, alloc, contrast, icc, field) {
+    if (contrast.pooled)
+      return pooledFactorOne(cells, alloc, contrast, icc, field);
     const i = armIndex[contrast.a];
     const j = armIndex[contrast.b];
-    const n1 = alloc[field][i];
-    const n2 = alloc[field][j];
+    const n1 = cells[field][i];
+    const n2 = cells[field][j];
     const attrition = field === "completers" ? 1 - s.controlAttrition : 1;
 
     if (arms[i].clusterGroup === arms[j].clusterGroup) {
@@ -565,9 +587,29 @@ export function createModel(s) {
     // BETWEEN-CLUSTER contrast: each arm carries its own design effect, computed on the
     // number of that arm's patients per clinician. Arm-specific rather than shared,
     // because under hybrid the ROM and no-ROM arms have different effective sizes.
-    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
+    const cvAdj = cvAdjTotal;
     const de = (m) => (1 + (m * attrition - 1) * icc) * cvAdj;
     return de(alloc.armClusterSize[i]) / n1 + de(alloc.armClusterSize[j]) / n2;
+  }
+
+  // Randomization is stratified by site, so each site yields its own estimate of the
+  // contrast and a stratified analysis pools them by inverse variance:
+  //
+  //   1/V = SUM_over_sites 1/V_s
+  //
+  // With S identical sites this reduces EXACTLY to the one-pool formula: V_s = S*V_single,
+  // so 1/V = S/(S*V_single) = 1/V_single. A one-site roster therefore reproduces the
+  // pre-stratification numbers bit for bit, which is what the regression checks assert.
+  //
+  // Sites contributing no information to a contrast (a cell allocated zero clinicians)
+  // simply drop out of the sum rather than making the whole contrast undefined.
+  function contrastFactor(alloc, contrast, icc, field) {
+    let inv = 0;
+    for (const site of alloc.sites) {
+      const f = contrastFactorOne(site, alloc, contrast, icc, field);
+      if (Number.isFinite(f) && f > 0) inv += 1 / f;
+    }
+    return inv > 0 ? 1 / inv : Infinity;
   }
 
   // A pooled contrast straddles both randomization units under hybrid, so it is neither
@@ -966,5 +1008,9 @@ export function createModel(s) {
     measurementVarianceMultiplier,
     useRasch,
     useMFRM,
+    roster,
+    cvSite,
+    cvTotal,
+    groupWeights,
   };
 }

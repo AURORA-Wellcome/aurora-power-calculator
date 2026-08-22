@@ -12,6 +12,7 @@ import {
   ComposedChart,
 } from "recharts";
 import { createModel, cohensH } from "./calc";
+import { parseRoster, feasibility } from "./sites";
 import { buildRCode } from "./rcode";
 import { defaults } from "./defaults";
 import {
@@ -142,6 +143,7 @@ export default function PowerCurves() {
     difItemInfo,
     randomization,
     mixedShare,
+    siteRoster,
   } = settings;
 
   const threeArm = designArms === 3;
@@ -270,6 +272,19 @@ export default function PowerCurves() {
   const currentAlloc = model.allocation(currentN);
   const currentDif = model.dif(currentN);
   const currentSpill = model.spillover(currentN);
+
+  // Site feasibility uses the SCALED roster (the one the power numbers actually use), so
+  // the table and the MDEs can never disagree about how many clinicians a site has.
+  const groupLabels = threeArm
+    ? randomization === "hybrid"
+      ? ["ROM", "no-ROM"]
+      : model.arms.map((a) => a.short)
+    : model.arms.map((a) => a.short);
+  const siteFeas = useMemo(
+    () => feasibility(currentAlloc.siteRoster, model.groupWeights, groupLabels),
+    [currentAlloc.siteRoster, model.groupWeights, groupLabels],
+  );
+  const rosterValid = parseRoster(siteRoster) !== null;
   const SPILL_SHARES = [0, 0.1, 0.15, 0.2, 0.25, 0.3];
   // The M=0 primary is the reference the cost column is measured against.
   const spillBase = model.spillover(currentN, 0).primary;
@@ -1230,6 +1245,145 @@ export default function PowerCurves() {
           {threeArm
             ? " In the 3-arm design both the clinician+patient and patient-only arms generate AURORA scores alongside clinician ratings; arm-B clinicians simply do not see the output."
             : " Treatment arm only."}
+        </div>
+      </div>
+
+      {/* Site feasibility */}
+      <div className={cardCls}>
+        <h2 className="font-semibold mb-1 text-sm md:text-base">
+          Site Feasibility (stratified randomization)
+        </h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Randomization is stratified by site, so clinicians are allocated
+          within each site and then aggregated. That shifts the realized
+          allocation away from the nominal one by an amount and direction that
+          depend on the roster shape, and it decides whether a site can support
+          a cell at all. The roster is rescaled to {currentAlloc.nClusters}{" "}
+          clinicians to match the current design.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 mb-3">
+          <div className="md:col-span-2">
+            <label className={labelCls}>
+              Site roster (patients-clinicians per site)
+            </label>
+            <input
+              type="text"
+              value={siteRoster}
+              onChange={(e) => set("siteRoster")(e.target.value)}
+              className={`w-full border rounded p-1.5 md:p-2 text-xs font-mono ${
+                rosterValid ? "" : "border-red-400 bg-red-50 text-red-700"
+              }`}
+              spellCheck={false}
+            />
+            <div className="text-xs text-gray-400">
+              {rosterValid
+                ? `${currentAlloc.siteRoster.length} sites`
+                : "Unparseable, so the default roster is in use. Each site needs at least as many patients as clinicians."}
+            </div>
+          </div>
+          <div className="text-xs text-gray-600 flex items-center">
+            <div>
+              <div>
+                <span className="font-medium">Cluster-size variation:</span>
+              </div>
+              <div className="text-gray-500">
+                between-site {model.cvSite.toFixed(4)} (from roster)
+              </div>
+              <div className="text-gray-500">
+                within-site {clusterSizeCV.toFixed(2)} (assumed)
+              </div>
+              <div>
+                combined{" "}
+                <span className="font-medium">{model.cvTotal.toFixed(4)}</span>{" "}
+                <span className="text-gray-400">(added in quadrature)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+          <table className="w-full text-xs md:text-sm min-w-[420px] tabular-nums">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-1.5 md:p-2">Site</th>
+                <th className="text-left p-1.5 md:p-2">Clinicians</th>
+                {groupLabels.map((g) => (
+                  <th key={g} className="text-left p-1.5 md:p-2">
+                    {g}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {currentAlloc.siteRoster.map((site, i) => (
+                <tr key={i} className="border-b">
+                  <td className="p-1.5 md:p-2">{site.name}</td>
+                  <td className="p-1.5 md:p-2">{site.clinicians}</td>
+                  {siteFeas.perSite[i].map((c, g) => (
+                    <td
+                      key={g}
+                      className={`p-1.5 md:p-2 ${
+                        c === 0
+                          ? "text-red-600 font-semibold"
+                          : c === 1
+                            ? "text-orange-600 font-semibold"
+                            : ""
+                      }`}
+                    >
+                      {c}
+                      {c === 0 ? " none" : c === 1 ? " single" : ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr className="font-semibold bg-gray-50">
+                <td className="p-1.5 md:p-2">Realized</td>
+                <td className="p-1.5 md:p-2">{currentAlloc.nClusters}</td>
+                {siteFeas.aggregate.map((c, g) => (
+                  <td key={g} className="p-1.5 md:p-2">
+                    {c}{" "}
+                    <span className="font-normal text-gray-500">
+                      ({((100 * c) / currentAlloc.nClusters).toFixed(1)}%)
+                    </span>
+                  </td>
+                ))}
+              </tr>
+              <tr className="text-gray-500">
+                <td className="p-1.5 md:p-2">Nominal</td>
+                <td className="p-1.5 md:p-2">{currentAlloc.nClusters}</td>
+                {siteFeas.nominal.map((c, g) => (
+                  <td key={g} className="p-1.5 md:p-2">
+                    {c.toFixed(1)}{" "}
+                    <span className="text-gray-400">
+                      ({((100 * c) / currentAlloc.nClusters).toFixed(1)}%)
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-2 text-xs">
+          {siteFeas.empty.length > 0 && (
+            <div className="text-red-700">
+              {siteFeas.empty.length} site-by-arm cell has no clinicians at all;
+              that site contributes nothing to any contrast involving it.
+            </div>
+          )}
+          {siteFeas.singleton.length > 0 && (
+            <div className="text-orange-700">
+              {siteFeas.singleton.length} site-by-arm cell has a single
+              clinician. Between- clinician contrasts drawing on those cells are
+              confounded with one individual&apos;s practice.
+            </div>
+          )}
+          {siteFeas.empty.length === 0 && siteFeas.singleton.length === 0 && (
+            <div className="text-teal-700">
+              Every site supports every cell with at least two clinicians.
+            </div>
+          )}
         </div>
       </div>
 

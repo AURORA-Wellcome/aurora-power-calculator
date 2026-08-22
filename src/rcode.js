@@ -6,6 +6,8 @@
 // used in calc.js, which makes agreement between the R output and the on-screen numbers a
 // real cross-check rather than a tautology.
 
+import { rosterFromSettings } from "./sites.js";
+
 export function buildRCode(s) {
   const threeArm = s.designArms === 3;
   const totalN = s.nClinicians * s.patientsPerCluster;
@@ -27,6 +29,9 @@ export function buildRCode(s) {
   list(id = "Tx vs Ctrl", a = 1, b = 2, family = "single")
 )`;
   const iccArms = threeArm ? "c(1, 2)" : "c(1)";
+  const roster = rosterFromSettings(s);
+  const rosterPatients = roster.map((x) => x.patients).join(", ");
+  const rosterClinicians = roster.map((x) => x.clinicians).join(", ");
   const hybrid = threeArm && s.randomization === "hybrid";
   // clusterGroup: which randomization unit each arm's patients sit in.
   const clusterGroups = threeArm
@@ -52,7 +57,9 @@ randomization       <- "${threeArm ? s.randomization : "cluster"}"
 cluster_group       <- ${clusterGroups}
 total_n             <- ${totalN}
 patients_per_cluster <- ${s.patientsPerCluster}
-cluster_size_cv     <- ${s.clusterSizeCV}
+cluster_size_cv     <- ${s.clusterSizeCV}   # WITHIN-site component (assumed)
+site_patients       <- c(${rosterPatients})
+site_clinicians     <- c(${rosterClinicians})
 control_attrition   <- ${s.controlAttrition}
 
 # Statistical parameters
@@ -126,26 +133,51 @@ dunnett_crit <- function(lambdas, alpha) {
 # Guarantees the per-arm cluster counts sum exactly to the total: 100 clinicians
 # across 1:1:1 is 34/33/33, not three rounded 33.3s. Ties favour the earlier arm.
 
-allocate_clusters <- function(total, weights) {
+# tie_break rotates which arm wins an exact tie. This runs once per SITE, and always
+# resolving ties the same way accumulates a systematic bias: with the eTable 1 roster a
+# nominal 75/25 came out as 79/21. Rotating spreads the odd clinician around.
+allocate_clusters <- function(total, weights, tie_break = 0) {
+  n <- length(weights)
   exact  <- total * weights / sum(weights)
   counts <- floor(exact)
   remaining <- total - sum(counts)
   if (remaining > 0) {
     fracs <- exact - counts
-    ord <- order(-fracs, seq_along(fracs))
+    rank  <- ((seq_along(weights) - 1 - tie_break) %% n)
+    ord <- order(-fracs, rank)
     for (k in seq_len(remaining)) counts[ord[k]] <- counts[ord[k]] + 1
   }
   counts
 }
+
+# Rescale the roster's clinician counts to the design's total, preserving site shape.
+scale_roster <- function(target) {
+  if (sum(site_clinicians) == target) return(site_clinicians)
+  allocate_clusters(target, site_clinicians)
+}
+
+# Between-site component of cluster-size variation, computed from the roster. It does NOT
+# replace cluster_size_cv: a roster records planned panel sizes (which barely vary) rather
+# than realized between-clinician spread (which dominates). They add in quadrature.
+panel <- site_patients / site_clinicians
+cv_between <- sqrt(sum(site_clinicians * (panel - sum(site_patients)/sum(site_clinicians))^2) /
+                   sum(site_clinicians)) / (sum(site_patients)/sum(site_clinicians))
+cv_total <- sqrt(cv_between^2 + cluster_size_cv^2)
 
 # Clinicians are apportioned across randomization UNITS, not arms: [ROM, no-ROM] under
 # hybrid, one per arm under cluster randomization.
 n_groups      <- max(cluster_group)
 group_weights <- sapply(seq_len(n_groups), function(g) sum(arm_weights[cluster_group == g]))
 
+# Randomization is STRATIFIED BY SITE: allocate within each site, then aggregate. That is
+# not the same as allocating one pool - largest-remainder rounding at each site shifts the
+# realized allocation away from the nominal one.
 allocation <- function(total_n) {
-  n_clusters     <- round(total_n / patients_per_cluster)
-  group_clusters <- allocate_clusters(n_clusters, group_weights)
+  n_clusters  <- round(total_n / patients_per_cluster)
+  site_c      <- scale_roster(n_clusters)
+  per_site    <- lapply(seq_along(site_c),
+                        function(i) allocate_clusters(site_c[i], group_weights, i - 1))
+  group_clusters <- Reduce(function(a, b) a + b, per_site)
 
   # Share of a unit's panel belonging to each arm: 1 for a cluster-randomized arm,
   # b/(b+c) or c/(b+c) for the two patient-level arms inside a no-ROM clinician.
@@ -160,32 +192,34 @@ allocation <- function(total_n) {
        clusters = clusters,
        randomized = randomized,
        completers = randomized * (1 - control_attrition),
-       arm_cluster_size = arm_cluster_size)
+       arm_cluster_size = arm_cluster_size,
+       per_site = per_site,
+       site_clinicians = site_c)
 }
 
 # Variance for a POOLED contrast, in variance-component form. The pooled arm can straddle
 # both randomization units under hybrid, and arms sharing clinicians are correlated - the
 # cross terms below are what a naive "merge the arms" calculation would miss.
-pooled_factor <- function(alloc, contrast, icc, field) {
+pooled_factor_one <- function(cells, alloc, contrast, icc, field) {
   idx <- contrast$pooled
   ref <- contrast$b
-  ns  <- alloc[[field]][idx]
+  ns  <- cells[[field]][idx]
   w   <- ns / sum(ns)
-  cv_adj <- 1 + cluster_size_cv^2
+  cv_adj <- 1 + cv_total^2
 
-  between <- 1 / alloc$clusters[ref]
-  within  <- 1 / alloc[[field]][ref]
+  between <- 1 / cells$clusters[ref]
+  within  <- 1 / cells[[field]][ref]
   for (k in seq_along(idx)) {
     i <- idx[k]
-    between <- between + w[k]^2 / alloc$clusters[i]
-    within  <- within  + w[k]^2 / alloc[[field]][i]
+    between <- between + w[k]^2 / cells$clusters[i]
+    within  <- within  + w[k]^2 / cells[[field]][i]
     if (cluster_group[i] == cluster_group[ref])
-      between <- between - 2 * w[k] / alloc$clusters[i]
+      between <- between - 2 * w[k] / cells$clusters[i]
   }
   if (length(idx) > 1) {
     for (a in 1:(length(idx) - 1)) for (b in (a + 1):length(idx)) {
       if (cluster_group[idx[a]] == cluster_group[idx[b]])
-        between <- between + 2 * w[a] * w[b] / alloc$clusters[idx[a]]
+        between <- between + 2 * w[a] * w[b] / cells$clusters[idx[a]]
     }
   }
   icc * cv_adj * between + (1 - icc) * within
@@ -193,18 +227,35 @@ pooled_factor <- function(alloc, contrast, icc, field) {
 
 # Design-effect-weighted sum of inverse sample sizes for a contrast. A within-clinician
 # contrast drops the between-clinician variance entirely, hence (1 - ICC).
-contrast_factor <- function(alloc, contrast, icc, field) {
-  if (!is.null(contrast$pooled)) return(pooled_factor(alloc, contrast, icc, field))
+# One stratum's contribution.
+contrast_factor_one <- function(cells, alloc, contrast, icc, field) {
+  if (!is.null(contrast$pooled)) return(pooled_factor_one(cells, alloc, contrast, icc, field))
   i <- contrast$a; j <- contrast$b
-  n1 <- alloc[[field]][i]; n2 <- alloc[[field]][j]
+  n1 <- cells[[field]][i]; n2 <- cells[[field]][j]
   attrition <- if (field == "completers") 1 - control_attrition else 1
 
   if (cluster_group[i] == cluster_group[j]) {
     return((1 - icc) * (1 / n1 + 1 / n2))
   }
-  cv_adj <- 1 + cluster_size_cv^2
+  cv_adj <- 1 + cv_total^2
   de <- function(m) (1 + (m * attrition - 1) * icc) * cv_adj
   de(alloc$arm_cluster_size[i]) / n1 + de(alloc$arm_cluster_size[j]) / n2
+}
+
+# Stratified analysis: each site gives its own estimate, pooled by inverse variance.
+# 1/V = SUM_s 1/V_s. With one site this is exactly the unstratified formula.
+contrast_factor <- function(alloc, contrast, icc, field) {
+  inv <- 0
+  for (si in seq_along(alloc$per_site)) {
+    gc <- alloc$per_site[[si]]
+    cl <- gc[cluster_group]
+    rand <- cl * alloc$arm_cluster_size
+    cells <- list(clusters = cl, randomized = rand,
+                  completers = rand * (1 - control_attrition))
+    f <- contrast_factor_one(cells, alloc, contrast, icc, field)
+    if (is.finite(f) && f > 0) inv <- inv + 1 / f
+  }
+  if (inv > 0) 1 / inv else Inf
 }
 
 # Clinician counts for a set of arms, counting each randomization unit once.
