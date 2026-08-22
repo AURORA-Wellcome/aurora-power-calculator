@@ -285,6 +285,24 @@ export default function PowerCurves() {
     [currentAlloc.siteRoster, model.groupWeights, groupLabels],
   );
   const rosterValid = parseRoster(siteRoster) !== null;
+
+  // How the clinicians divide, as ONE definition used everywhere it is displayed.
+  // Under hybrid, arms B and C occupy the SAME no-ROM clinicians, so `clusters` reports
+  // that shared count against both arms; listing it per arm implies more clinicians than
+  // exist (38 + 62 + 62 for a 100-clinician trial). Report randomization units instead.
+  const clusterSplit = useMemo(() => {
+    if (threeArm && randomization === "hybrid") {
+      return [
+        { label: "ROM", short: "ROM", n: currentAlloc.groupClusters[0] },
+        { label: "no-ROM", short: "no-ROM", n: currentAlloc.groupClusters[1] },
+      ];
+    }
+    return model.arms.map((a, i) => ({
+      label: a.label,
+      short: a.short,
+      n: currentAlloc.clusters[i],
+    }));
+  }, [threeArm, randomization, currentAlloc, model.arms]);
   const SPILL_SHARES = [0, 0.1, 0.15, 0.2, 0.25, 0.3];
   // The M=0 primary is the reference the cost column is measured against.
   const spillBase = model.spillover(currentN, 0).primary;
@@ -475,10 +493,13 @@ export default function PowerCurves() {
               {currentHamd.nClusters}
             </div>
             <div className="text-gray-500 text-xs">
-              {model.arms
-                .map((a, i) => `${currentAlloc.clusters[i]} ${a.short}`)
-                .join(" / ")}
+              {clusterSplit.map((c) => `${c.n} ${c.short}`).join(" / ")}
             </div>
+            {threeArm && randomization === "hybrid" && (
+              <div className="text-xs text-gray-400">
+                no-ROM panels carry both Pt-only and Control
+              </div>
+            )}
           </div>
           <div className="bg-orange-50 p-2 md:p-3 rounded">
             <div className="text-gray-500 text-xs">Completers</div>
@@ -803,14 +824,7 @@ export default function PowerCurves() {
         <div className="mt-2 text-xs text-gray-500">
           Cluster split:{" "}
           <span className="font-medium text-gray-700">
-            {threeArm && randomization === "hybrid"
-              ? // Under hybrid, arms B and C occupy the SAME clinicians, so listing a
-                // count per arm would imply more clinicians than exist. Report the
-                // randomization units instead, then how each no-ROM panel divides.
-                `ROM ${currentAlloc.groupClusters[0]} · no-ROM ${currentAlloc.groupClusters[1]}`
-              : model.arms
-                  .map((a, i) => `${a.label} ${currentAlloc.clusters[i]}`)
-                  .join(" · ")}
+            {clusterSplit.map((c) => `${c.label} ${c.n}`).join(" · ")}
           </span>{" "}
           ({currentAlloc.nClusters} clinicians
           {threeArm && randomization === "hybrid"
