@@ -1533,7 +1533,7 @@ export default function PowerCurves() {
           </div>
           <p className="text-xs text-gray-500 mt-2">
             Values are {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"}{" "}
-            in HAM-D points, with Cohen&apos;s d in brackets. The per-path
+            in HAM-D points, with Cohen&apos;s d in parentheses. The per-path
             estimates (onto B, onto C) are much weaker than the pooled one;
             treat them as descriptive and pre-specify the pooled test. Spillover
             should attenuate the treatment effect, so an estimate with the
