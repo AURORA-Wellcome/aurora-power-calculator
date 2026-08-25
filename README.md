@@ -178,6 +178,14 @@ So the dial changes only how patients are *arranged* across clinicians, never ho
 in each arm. The cost is that the clean primary contrast draws on fewer pure-ROM and
 no-ROM clinicians, which widens its interval; the panel reports that cost per row.
 
+The panel reports practicality per site alongside the statistical trade-off, because the
+two pull in opposite directions on this roster: the settings that are affordable
+statistically are the ones that fail operationally. At a 10% mixed share every site gets
+exactly one mixed clinician, so nothing is interpretable; only at 30% does every site clear
+two, and that is the setting where the primary interval already exceeds the effect the
+literature expects. A single mixed clinician contributes roughly two completers per
+spillover cell, which is the number that decides whether the substudy is worth running.
+
 Caveats worth carrying into a protocol: the per-path estimates (onto app-only, onto TAU)
 are much weaker than the pooled one and should be treated as descriptive; spillover should
 attenuate the treatment effect, so an estimate of the opposite sign is noise; and a mixed

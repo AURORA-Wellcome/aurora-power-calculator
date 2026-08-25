@@ -1478,6 +1478,7 @@ export default function PowerCurves() {
                   <th className="text-left p-1.5 md:p-2">A vs C (clean)</th>
                   <th className="text-left p-1.5 md:p-2">vs M=0</th>
                   <th className="text-left p-1.5 md:p-2">Spillover pooled</th>
+                  <th className="text-left p-1.5 md:p-2">Sites usable</th>
                   <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
                     onto B
                   </th>
@@ -1516,6 +1517,19 @@ export default function PowerCurves() {
                         {sh === 0 ? "—" : `+${cost}%`}
                       </td>
                       <td className="p-1.5 md:p-2">{fmt(r.spilloverPooled)}</td>
+                      <td
+                        className={`p-1.5 md:p-2 ${
+                          r.siteSummary.ok === 0
+                            ? "text-red-600"
+                            : r.siteSummary.single > 0
+                              ? "text-orange-600"
+                              : "text-teal-700"
+                        }`}
+                      >
+                        {sh === 0
+                          ? "—"
+                          : `${r.siteSummary.ok}/${r.siteSummary.ok + r.siteSummary.single + r.siteSummary.none}`}
+                      </td>
                       <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
                         {fmt(r.spilloverB)}
                       </td>
@@ -1531,6 +1545,80 @@ export default function PowerCurves() {
               </tbody>
             </table>
           </div>
+          <div className="mt-3 pt-3 border-t">
+            <h3 className="font-medium text-xs md:text-sm mb-1">
+              Practicality by site, at {currentSpill.M} mixed panels
+            </h3>
+            <p className="text-xs text-gray-500 mb-2">
+              The spillover comparison is between clinicians, so a site with a
+              single mixed clinician has its whole contribution confounded with
+              that one person&apos;s practice, and contributes nothing usable.
+              Sites are listed smallest last, because that is where the design
+              fails first.
+            </p>
+            <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+              <table className="w-full text-xs md:text-sm min-w-[520px] tabular-nums">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-1.5 md:p-2">Site</th>
+                    <th className="text-left p-1.5 md:p-2">Clinicians</th>
+                    <th className="text-left p-1.5 md:p-2">Mixed panels</th>
+                    <th className="text-left p-1.5 md:p-2">
+                      Completers per spillover cell
+                    </th>
+                    <th className="text-left p-1.5 md:p-2">Usable?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentSpill.siteDetail.map((st, i) => (
+                    <tr key={i} className="border-b">
+                      <td className="p-1.5 md:p-2">{st.name}</td>
+                      <td className="p-1.5 md:p-2">{st.clinicians}</td>
+                      <td className="p-1.5 md:p-2">{st.mixed}</td>
+                      <td className="p-1.5 md:p-2">
+                        {st.cellCompleters.toFixed(1)}
+                      </td>
+                      <td
+                        className={`p-1.5 md:p-2 font-medium ${
+                          st.verdict === "ok"
+                            ? "text-teal-700"
+                            : st.verdict === "single"
+                              ? "text-orange-600"
+                              : "text-red-600"
+                        }`}
+                      >
+                        {st.verdict === "ok"
+                          ? "yes"
+                          : st.verdict === "single"
+                            ? "one clinician only"
+                            : "no mixed panel"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p
+              className={`text-xs mt-2 ${
+                currentSpill.siteSummary.ok === 0
+                  ? "text-red-700"
+                  : currentSpill.siteSummary.single > 0
+                    ? "text-orange-700"
+                    : "text-teal-700"
+              }`}
+            >
+              {currentSpill.siteSummary.ok} of {currentSpill.siteDetail.length}{" "}
+              sites can run more than one mixed panel.{" "}
+              {currentSpill.siteSummary.single > 0 &&
+                `${currentSpill.siteSummary.single} contribute a single clinician each, so their share of the comparison is confounded. `}
+              That leaves{" "}
+              {currentSpill.siteSummary.usableCellCompleters.toFixed(0)} of{" "}
+              {currentSpill.siteSummary.totalCellCompleters.toFixed(0)}{" "}
+              completers per spillover cell in sites where the estimate is
+              interpretable.
+            </p>
+          </div>
+
           <p className="text-xs text-gray-500 mt-2">
             Values are {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"}{" "}
             in HAM-D points, with Cohen&apos;s d in parentheses. The per-path

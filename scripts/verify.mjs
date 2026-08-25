@@ -1718,6 +1718,56 @@ section("7e. Spillover substudy (mixed panels)");
     );
   }
 
+  // Per-site practicality. The statistically cheap settings are the operationally worst
+  // ones, which is the whole point of surfacing this, so pin the shape of that tension.
+  {
+    const bySite = (share) => m.spillover(N, share).siteSummary;
+    const s10 = bySite(0.1), s20 = bySite(0.2), s30 = bySite(0.3);
+    ok(
+      "at a low mixed share every site is a singleton",
+      s10.ok === 0 && s10.single === 11,
+      `${s10.ok} ok / ${s10.single} single`,
+    );
+    ok(
+      "usable completers are zero when every site is a singleton",
+      s10.usableCellCompleters === 0 && s10.totalCellCompleters > 0,
+      `${s10.usableCellCompleters} usable of ${s10.totalCellCompleters.toFixed(1)}`,
+    );
+    ok(
+      "raising the mixed share converts singletons into usable sites",
+      s20.ok > s10.ok && s30.ok > s20.ok,
+      `${s10.ok} -> ${s20.ok} -> ${s30.ok}`,
+    );
+    ok(
+      "only the highest share clears every site",
+      s30.single === 0 && s20.single > 0,
+      `0.20 leaves ${s20.single} singletons, 0.30 leaves ${s30.single}`,
+    );
+    // Every site's cells must exhaust its clinicians, as in the main allocation.
+    const d = m.spillover(N, 0.2).siteDetail;
+    ok(
+      "per-site P/M/K exhausts each site",
+      d.every((x) => x.pure + x.mixed + x.noRom === x.clinicians),
+      d.map((x) => `${x.pure}+${x.mixed}+${x.noRom}=${x.clinicians}`).slice(0, 3).join(" "),
+    );
+    ok(
+      "site verdicts follow the mixed count",
+      d.every(
+        (x) =>
+          (x.mixed === 0 && x.verdict === "none") ||
+          (x.mixed === 1 && x.verdict === "single") ||
+          (x.mixed > 1 && x.verdict === "ok"),
+      ),
+    );
+    ok(
+      "usable completers never exceed the total",
+      [0.1, 0.15, 0.2, 0.3].every((sh) => {
+        const y = bySite(sh);
+        return y.usableCellCompleters <= y.totalCellCompleters + 1e-9;
+      }),
+    );
+  }
+
   // Off in two-arm mode.
   {
     const t2 = createModel({ ...defaults, designArms: 2, mixedShare: 0.2 });

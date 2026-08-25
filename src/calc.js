@@ -954,7 +954,43 @@ export function createModel(s) {
       };
     };
 
+    // Per-site breakdown. The spillover contrast is BETWEEN clinicians, so a site with a
+    // single mixed clinician has its whole contribution confounded with that one
+    // individual's practice, and a site with none contributes nothing at all. Both are
+    // feasibility facts about the roster that the variance formula cannot see.
+    const perSiteCells = allocateRoster(alloc.siteRoster, [P, M, K]);
+    const siteDetail = alloc.siteRoster.map((st, i) => {
+      const cells = perSiteCells.perSite[i];
+      const mixedHere = cells[1];
+      return {
+        name: st.name,
+        clinicians: st.clinicians,
+        pure: cells[0],
+        mixed: mixedHere,
+        noRom: cells[2],
+        // Completers in ONE spillover cell: the app-only patients inside this site's
+        // mixed panels. This is what decides practicality, and a single mixed clinician
+        // contributes only about two analysable patients.
+        cellCompleters: mixedHere * mixB * keep,
+        verdict: mixedHere === 0 ? "none" : mixedHere === 1 ? "single" : "ok",
+      };
+    });
+    const siteSummary = {
+      ok: siteDetail.filter((x) => x.verdict === "ok").length,
+      single: siteDetail.filter((x) => x.verdict === "single").length,
+      none: siteDetail.filter((x) => x.verdict === "none").length,
+      // Patients usable for an UNCONFOUNDED comparison, i.e. excluding sites whose entire
+      // contribution rests on a single clinician.
+      usableCellCompleters: siteDetail
+        .filter((x) => x.verdict === "ok")
+        .reduce((a, x) => a + x.cellCompleters, 0),
+      totalCellCompleters: siteDetail.reduce((a, x) => a + x.cellCompleters, 0),
+    };
+
     return {
+      available: true,
+      siteDetail,
+      siteSummary,
       M,
       P: Math.round(P),
       K: Math.round(K),
