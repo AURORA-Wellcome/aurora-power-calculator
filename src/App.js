@@ -1524,7 +1524,7 @@ export default function PowerCurves() {
         </div>
       </div>
 
-      {/* Spillover substudy */}
+      {/* Within-clinician effect spillover substudy */}
       {threeArm && (
         <div
           className={
@@ -1541,7 +1541,7 @@ export default function PowerCurves() {
             onCopy={copyAnchor}
             copied={copiedAnchor === "spillover"}
           >
-            Spillover Substudy (mixed panels)
+            Within-Clinician Effect Spillover Substudy
           </SectionHeading>
 
           <div className="flex flex-wrap items-center gap-3 mb-1">

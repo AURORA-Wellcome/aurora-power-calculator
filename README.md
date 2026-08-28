@@ -159,7 +159,7 @@ planned targets holds no information about it. Replacing the parameter with the 
 would make every MDE about 1.9% more optimistic by dropping a real variance component, so
 the parameter stays, relabelled as the within-site residual.
 
-## Spillover substudy
+## Within-clinician effect spillover substudy
 
 Setting `mixedShare` above zero introduces a third clinician type: ROM-trained, dashboard
 in hand, but with only some of their patients on it. Comparing the *same arm* across

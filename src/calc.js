@@ -855,7 +855,7 @@ export function createModel(s) {
     };
   }
 
-  // --- Spillover substudy (mixed panels) -----------------------------------
+  // --- Within-clinician effect spillover substudy ---------------------------
 
   // A THIRD clinician type: ROM-trained, dashboard in hand, but only some of their
   // patients on it. Their panel carries all three conditions; the rest of their patients
