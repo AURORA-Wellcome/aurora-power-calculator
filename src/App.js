@@ -62,11 +62,44 @@ const LinkIcon = () => (
   </svg>
 );
 
+const AnchorIcon = () => (
+  <svg {...iconProps} width={13} height={13}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
+);
+
 const CheckIcon = () => (
   <svg {...iconProps}>
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
+
+// Deep-linkable section heading. The anchor copies the CURRENT configuration token
+// alongside the fragment, so a link lands on the right panel showing the right numbers -
+// which is what makes it useful for citing a specific figure in a memo.
+function SectionHeading({ id, children, className = "mb-1", onCopy, copied }) {
+  return (
+    <h2
+      id={id}
+      className={`group flex items-center gap-1.5 font-semibold text-sm md:text-base scroll-mt-4 ${className}`}
+    >
+      <span>{children}</span>
+      <button
+        onClick={() => onCopy(id)}
+        title="Copy a link to this section with the current settings"
+        aria-label="Copy a link to this section with the current settings"
+        className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 ${
+          copied
+            ? "text-green-600 opacity-100"
+            : "text-gray-400 hover:text-gray-600"
+        }`}
+      >
+        {copied ? <CheckIcon /> : <AnchorIcon />}
+      </button>
+    </h2>
+  );
+}
 
 function loadSettings() {
   // A URL token wins over saved settings: following a shared link should show that
@@ -167,6 +200,30 @@ export default function PowerCurves() {
     // Keep the address bar in step so the current view is always linkable.
     syncLocation(settings);
   }, [settings]);
+
+  const [copiedAnchor, setCopiedAnchor] = useState(null);
+  const copyAnchor = async (id) => {
+    const url = shareableUrl(settings).split("#")[0] + "#" + id;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch (e) {
+      window.prompt("Copy this link:", url);
+      return;
+    }
+    setCopiedAnchor(id);
+    setTimeout(() => setCopiedAnchor(null), 1600);
+  };
+
+  // React renders after the document is parsed, so a fragment in the initial URL never
+  // resolves natively - the target does not exist yet. Scroll once on mount instead.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const t = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, []);
 
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
@@ -411,10 +468,15 @@ export default function PowerCurves() {
       {/* Current Design Summary */}
       <div className={cardCls}>
         <div className="flex flex-wrap justify-between items-baseline gap-2 mb-3">
-          <h2 className="font-semibold text-sm md:text-base">
+          <SectionHeading
+            id="design-summary"
+            className="mb-0"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "design-summary"}
+          >
             Current Design (N={currentN.toLocaleString()},{" "}
             {threeArm ? "3-arm" : "2-arm"})
-          </h2>
+          </SectionHeading>
           {threeArm && (
             <span className="text-xs text-gray-500">
               Showing{" "}
@@ -588,7 +650,14 @@ export default function PowerCurves() {
       {/* Design Controls */}
       <div className={cardCls}>
         <div className="flex justify-between items-center mb-3 gap-2">
-          <h2 className="font-semibold text-sm md:text-base">Trial Design</h2>
+          <SectionHeading
+            id="trial-design"
+            className="mb-0"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "trial-design"}
+          >
+            Trial Design
+          </SectionHeading>
           <div className="flex gap-2">
             <button
               onClick={resetToDefaults}
@@ -844,7 +913,14 @@ export default function PowerCurves() {
 
       {/* Parameter Controls */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-3 text-sm md:text-base">Parameters</h2>
+        <SectionHeading
+          id="parameters"
+          className="mb-3"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "parameters"}
+        >
+          Parameters
+        </SectionHeading>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
           <div>
             <label className={labelCls}>Power</label>
@@ -1090,9 +1166,14 @@ export default function PowerCurves() {
 
       {/* Measurement Model Controls */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-3 text-sm md:text-base">
+        <SectionHeading
+          id="measurement-model"
+          className="mb-3"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "measurement-model"}
+        >
           Measurement Model (HAM-D)
-        </h2>
+        </SectionHeading>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 md:mb-4">
           {[
             ["sum", "Sum score"],
@@ -1189,10 +1270,15 @@ export default function PowerCurves() {
 
       {/* ICC Validation Controls */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-3 text-sm md:text-base">
+        <SectionHeading
+          id="icc-validation"
+          className="mb-3"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "icc-validation"}
+        >
           Intraclass Correlation Validation (arms{" "}
           {currentIcc.armKeys.join(" + ")})
-        </h2>
+        </SectionHeading>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
           <div>
             <label className={labelCls}>
@@ -1264,9 +1350,14 @@ export default function PowerCurves() {
 
       {/* Site feasibility */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-1 text-sm md:text-base">
+        <SectionHeading
+          id="site-feasibility"
+          className="mb-1"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "site-feasibility"}
+        >
           Site Feasibility (stratified randomization)
-        </h2>
+        </SectionHeading>
         <p className="text-xs text-gray-500 mb-3">
           Randomization is stratified by site, so clinicians are allocated
           within each site and then aggregated. That shifts the realized
@@ -1404,9 +1495,14 @@ export default function PowerCurves() {
       {/* Spillover substudy */}
       {threeArm && (
         <div className={cardCls}>
-          <h2 className="font-semibold mb-1 text-sm md:text-base">
+          <SectionHeading
+            id="spillover"
+            className="mb-1"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "spillover"}
+          >
             Spillover Substudy (mixed panels)
-          </h2>
+          </SectionHeading>
           <p className="text-xs text-gray-500 mb-3">
             A third clinician type: ROM-trained with the dashboard, but only
             some of their patients on it. Comparing the same arm across
@@ -1632,9 +1728,14 @@ export default function PowerCurves() {
 
       {/* Fairness / DIF substudy */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-1 text-sm md:text-base">
+        <SectionHeading
+          id="fairness"
+          className="mb-1"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "fairness"}
+        >
           Measurement Fairness (arms {currentDif.armKeys.join(" + ")})
-        </h2>
+        </SectionHeading>
         <p className="text-xs text-gray-500 mb-3">
           Differential item functioning across subgroups. Only AURORA users
           produce item responses, so this draws on the same arms as the
@@ -1788,9 +1889,14 @@ export default function PowerCurves() {
       <div className="grid md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
         {/* HAM-D Chart */}
         <div className="bg-white rounded-lg shadow p-3 md:p-4">
-          <h2 className="font-semibold mb-1 text-sm md:text-base">
+          <SectionHeading
+            id="chart-hamd"
+            className="mb-1"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "chart-hamd"}
+          >
             Depression Severity (HAM-D)
-          </h2>
+          </SectionHeading>
           <p className="text-xs text-gray-500 mb-1">
             {showPrecision
               ? `Precision: half-width of the ${ciLevel}% CI on the effect estimate`
@@ -1963,9 +2069,14 @@ export default function PowerCurves() {
 
         {/* Retention Chart */}
         <div className="bg-white rounded-lg shadow p-3 md:p-4">
-          <h2 className="font-semibold mb-1 text-sm md:text-base">
+          <SectionHeading
+            id="chart-retention"
+            className="mb-1"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "chart-retention"}
+          >
             Study Retention
-          </h2>
+          </SectionHeading>
           <p className="text-xs text-gray-500 mb-1">
             {showPrecision
               ? `Precision: half-width of the ${ciLevel}% CI`
@@ -2065,10 +2176,15 @@ export default function PowerCurves() {
 
       {/* ICC Validation Chart */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-1 text-sm md:text-base">
+        <SectionHeading
+          id="chart-icc"
+          className="mb-1"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "chart-icc"}
+        >
           Intraclass Correlation Validation (arms{" "}
           {currentIcc.armKeys.join(" + ")})
-        </h2>
+        </SectionHeading>
         <p className="text-xs text-gray-500 mb-2 md:mb-3">
           95% confidence interval precision for AURORA-clinician agreement
           (target: rule out intraclass correlation {"<"} {targetIcc})
@@ -2168,9 +2284,14 @@ export default function PowerCurves() {
 
       {/* Sample Size Table */}
       <div className={cardCls}>
-        <h2 className="font-semibold mb-3 text-sm md:text-base">
+        <SectionHeading
+          id="sample-size"
+          className="mb-3"
+          onCopy={copyAnchor}
+          copied={copiedAnchor === "sample-size"}
+        >
           Sample Size Requirements
-        </h2>
+        </SectionHeading>
         <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
           <table className="w-full text-xs md:text-sm min-w-[500px] tabular-nums">
             <thead>
@@ -2287,16 +2408,34 @@ export default function PowerCurves() {
       </div>
 
       {/* R Code for Verification */}
-      <div className="bg-white rounded-lg shadow mb-4 md:mb-6">
-        <button
-          onClick={() => setShowRCode(!showRCode)}
-          className="w-full p-3 md:p-4 text-left flex justify-between items-center hover:bg-gray-50"
-        >
-          <h2 className="font-semibold text-sm md:text-base">
-            R Code for Verification
-          </h2>
-          <span className="text-gray-500">{showRCode ? "−" : "+"}</span>
-        </button>
+      <div
+        id="r-code"
+        className="bg-white rounded-lg shadow mb-4 md:mb-6 scroll-mt-4"
+      >
+        <div className="group flex items-center">
+          <button
+            onClick={() => setShowRCode(!showRCode)}
+            className="flex-1 p-3 md:p-4 text-left flex justify-between items-center hover:bg-gray-50"
+          >
+            <h2 className="font-semibold text-sm md:text-base">
+              R Code for Verification
+            </h2>
+            <span className="text-gray-500">{showRCode ? "−" : "+"}</span>
+          </button>
+          {/* Outside the toggle: nesting a button inside a button is invalid. */}
+          <button
+            onClick={() => copyAnchor("r-code")}
+            title="Copy a link to this section with the current settings"
+            aria-label="Copy a link to this section with the current settings"
+            className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-2 mr-2 rounded hover:bg-gray-100 ${
+              copiedAnchor === "r-code"
+                ? "text-green-600 opacity-100"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            {copiedAnchor === "r-code" ? <CheckIcon /> : <AnchorIcon />}
+          </button>
+        </div>
         {showRCode && (
           <div className="p-3 md:p-4 border-t">
             <div className="flex flex-wrap items-center gap-3 mb-3">

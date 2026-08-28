@@ -217,6 +217,24 @@ therefore diverge slightly when `CV > 0`, with the pooled form about 1.5% less i
 at `CV = 0.2`. The inherited formula is retained on the pairwise path so the two-arm
 regression against the original implementation continues to hold exactly.
 
+## Section anchors
+
+Every panel heading carries a stable `id` and a hover-revealed anchor that copies a link
+combining the **current configuration token with the section fragment**, e.g.
+`?c=1_0_0_3_…#spillover`. That lands a reader on the right panel showing the right numbers,
+which is what makes a figure citable from a memo.
+
+Stable ids: `design-summary`, `trial-design`, `parameters`, `measurement-model`,
+`icc-validation`, `site-feasibility`, `spillover`, `fairness`, `chart-hamd`,
+`chart-retention`, `chart-icc`, `sample-size`, `r-code`. Treat them as a wire format like
+`FIELD_ORDER` — renaming one breaks every link already circulating.
+
+Two things this needs that a plain `#id` does not. React renders after the document is
+parsed, so a fragment in the initial URL never resolves natively (the target does not exist
+yet) and the app scrolls once on mount instead. And `syncLocation` rewrites the URL on every
+settings change, so it has to preserve the fragment or the anchor disappears the moment
+anyone touches a control.
+
 ## URL tokens
 
 The `?c=` parameter encodes every setting positionally (`1_<v0>_<v1>_...`, ~100 characters), not a diff against the defaults. That is deliberate: a link names every value it depends on, so changing an app default later cannot silently re-interpret a link shared before the change. `FIELD_ORDER` in `src/urlState.js` is therefore **append-only**. Inserting or reordering a field would change the meaning of every link already in circulation. Older, shorter tokens decode with their trailing fields falling back to defaults, which is the correct reading since those links genuinely did not specify them.
