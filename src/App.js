@@ -547,7 +547,7 @@ export default function PowerCurves() {
         AURORA Trial Power Calculator
       </h1>
       <p className="text-gray-600 mb-4 md:mb-6 text-sm md:text-base">
-        Precision, detectable effects and feasibility across arms, allocations
+        Precision, detectable effects, and feasibility across arms, allocations,
         and sites
       </p>
 
