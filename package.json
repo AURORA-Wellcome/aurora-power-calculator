@@ -2,19 +2,27 @@
   "name": "aurora-power-calculator",
   "version": "1.0.0",
   "private": true,
-  "homepage": "https://aurora-wellcome.github.io/aurora-power-calculator",
+  "type": "module",
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "recharts": "^2.10.0"
   },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "verify": "node scripts/verify.mjs"
-  },
   "devDependencies": {
-    "react-scripts": "5.0.1"
+    "@vitejs/plugin-react": "^5.2.0",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.26",
+    "tailwindcss": "3.4.17",
+    "vite": "^7.3.6"
+  },
+  "overrides": {
+    "lodash": "^4.18.1"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verify": "node scripts/verify.mjs"
   },
   "browserslist": {
     "production": [

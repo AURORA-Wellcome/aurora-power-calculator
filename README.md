@@ -30,9 +30,11 @@ Interactive web application for exploring the precision and minimum detectable e
 | `src/rcode.js` | Generates the R verification script (single source for both the displayed code and the WebR run). |
 | `src/defaults.js` | Shipped default settings, importable without React so the checks can pin them. |
 | `src/urlState.js` | Reversible URL token codec for the full configuration, with validation of untrusted input. |
-| `src/App.js` | UI and charts. |
+| `src/App.jsx` | UI and charts. |
 | `scripts/verify.mjs` | Checks for `src/calc.js`, described below. |
 | `scripts/crosscheck-r.mjs` | Emits the generated R for a design plus the corresponding JS values, for side-by-side comparison. |
+| `vite.config.js` | Build config. `base` must match the GitHub Pages project path; it replaces the `homepage` field react-scripts used to read. |
+| `tailwind.config.js` | Tailwind is a build step, pinned to 3.x. See the note below. |
 
 ## Run Locally
 
@@ -49,10 +51,10 @@ npm install
 ### Development
 
 ```bash
-npm start
+npm run dev
 ```
 
-Opens the app at [http://localhost:3000](http://localhost:3000).
+Opens the app at [http://localhost:5173](http://localhost:5173).
 
 ### Verification
 
@@ -75,7 +77,20 @@ Rscript /tmp/three.R
 npm run build
 ```
 
-Creates a production build in the `build/` folder.
+Creates a production build in the `dist/` folder. `npm run preview` serves it
+locally at the same `/aurora-power-calculator/` base path GitHub Pages uses, which is
+the only way to catch a broken `base` before deploying.
+
+## Styling
+
+Tailwind is compiled at build time via PostCSS and **pinned to 3.4.17**. The app
+previously loaded `cdn.tailwindcss.com`, which is the browser JIT compiler: render-blocking,
+unpinned, and a hard external dependency, so the app rendered completely unstyled anywhere
+that CDN was unreachable. The CDN redirects to 3.4.17, so pinning to that version made the
+migration pixel-identical (verified by byte-identical screenshots against the deployed site).
+
+Tailwind 4 moved the default palette to OKLCH and replaced the config format. Upgrading
+would restyle every surface, so it needs to be its own change with its own visual check.
 
 ## Effect sizes
 
