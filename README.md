@@ -40,10 +40,16 @@ Interactive web application for exploring the precision and minimum detectable e
 
 ### Prerequisites
 
-- Node.js 24, pinned in `.node-version`. nvm, fnm and nodenv read that file
-  natively (`nvm use`); mise needs `mise trust` once in this directory, which the
-  committed `mise.toml` then wires up. CI reads the same file, so local and deploy
-  builds cannot drift apart.
+- Node.js 24, pinned in `.node-version`. CI reads the same file, so local and
+  deploy builds cannot drift apart. fnm and nodenv pick it up with no setup; mise
+  needs `mise trust` once in this directory, which the committed `mise.toml` then
+  wires up. **nvm reads only `.nvmrc`**, so nvm users need
+  `nvm use $(cat .node-version)`.
+
+  The file holds one bare version and no comment, deliberately: fnm parses the
+  whole file as a version, while mise and nodenv read only the first line or word,
+  so no comment position is safe across all of them. The note about when to move
+  to Node 26 is in `mise.toml`, which is TOML and can carry one.
 - R, only for `scripts/crosscheck-r.mjs`. Everything else runs without it.
 
 ### Installation

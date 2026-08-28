@@ -1,6 +1,15 @@
 # mise ignores .node-version unless idiomatic version files are enabled per tool. Enabling
 # it here, rather than writing the version into this file, keeps .node-version the single
-# source of truth: the workflow reads that same file via setup-node's node-version-file,
-# and nvm, fnm and nodenv read it natively with no config at all.
+# source of truth: the workflow reads that same file via setup-node's node-version-file.
+#
+# .node-version itself holds one bare version and nothing else, deliberately. It cannot
+# carry a comment: fnm reads the whole file, trims it and parses that as a version, so any
+# comment breaks it wherever it sits; mise and nodenv read only the first line or word, so
+# a comment above the version breaks those instead. There is no comment position that is
+# safe in all of them, which is why this note lives here.
+#
+# NEXT BUMP: Node 26 becomes LTS on 2026-10-28. Node 24 is supported until 2028-04-30, so
+# there is no rush, but 26 is the next long-term target. Changing .node-version is the
+# whole change; CI follows it automatically.
 [settings]
 idiomatic_version_file_enable_tools = ["node"]
