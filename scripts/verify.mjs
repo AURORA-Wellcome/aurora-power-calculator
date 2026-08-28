@@ -94,14 +94,19 @@ close(
 );
 close("old table z(power=0.8)=0.842 reproduced", normInv(0.8), 0.842, 5e-4);
 
-// t quantiles against R's qt().
-close("tQuantile(0.975, 60)", tQuantile(0.975, 60), 2.000297822, 1e-4);
-close("tQuantile(0.975, 30)", tQuantile(0.975, 30), 2.042272456, 1e-4);
+// t quantiles against R's qt(), to full precision. The tolerances here were once loose
+// enough (2e-3 to 5e-3) to accommodate rounded reference values rather than to bound the
+// approximation, and that hid a genuinely wrong constant: qt(0.9875, 37) is 2.336316, not
+// the 2.339303 this file asserted. The Cornish-Fisher expansion is good to 2e-6 there.
+// 1e-4 leaves roughly 6x headroom over the worst case below while still being a real guard.
+close("tQuantile(0.975, 60)", tQuantile(0.975, 60), 2.000297822014, 1e-4);
+close("tQuantile(0.975, 30)", tQuantile(0.975, 30), 2.042272456301, 1e-4);
 close("tQuantile(0.975, 1e9) -> z", tQuantile(0.975, 1e9), 1.959963985, 1e-6);
-// Further into the tail, where the small-sample correction actually operates.
-close("tQuantile(0.9875, 37)", tQuantile(0.9875, 37), 2.339303, 3e-3);
-close("tQuantile(0.995, 97)", tQuantile(0.995, 97), 2.627, 2e-3);
-close("tQuantile(0.995, 30)", tQuantile(0.995, 30), 2.749996, 5e-3);
+// Further into the tail, where the small-sample correction actually operates. The worst
+// error across the whole reachable parameter space is 1.5e-5, at df = 30.
+close("tQuantile(0.9875, 37)", tQuantile(0.9875, 37), 2.33631599691, 1e-4);
+close("tQuantile(0.995, 97)", tQuantile(0.995, 97), 2.627467774013, 1e-4);
+close("tQuantile(0.995, 30)", tQuantile(0.995, 30), 2.749995653567, 1e-4);
 
 // ---------------------------------------------------------------------------
 section("2. Dunnett critical values (published tables, df = infinity)");
