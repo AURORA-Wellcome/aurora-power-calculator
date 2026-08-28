@@ -1,8 +1,9 @@
-name: Deploy to GitHub Pages
+name: Verify and deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,8 +11,9 @@ permissions:
   pages: write
   id-token: write
 
+# Keyed by ref so a pull request build cannot cancel an in-flight deploy of main.
 concurrency:
-  group: "pages"
+  group: "pages-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
@@ -23,23 +25,37 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Vite requires ^20.19 || >=22.12. A bare "20" floats onto whatever 20.x is
+          # current, which has drifted below that bound before.
+          node-version: "22"
+          cache: npm
 
+      # ci, not install: honours package-lock.json, so a deploy builds the same tree
+      # that was verified locally.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      # Before the build, so a broken calculation fails the run rather than shipping.
+      # 311 checks, ~0.2s.
+      - name: Verify statistics
+        run: npm run verify
 
       - name: Build
         run: npm run build
 
       - name: Setup Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    # Pull requests run the verify and build steps above but must not publish.
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
