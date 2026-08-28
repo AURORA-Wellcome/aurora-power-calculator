@@ -1823,12 +1823,14 @@ export default function PowerCurves() {
                             {st.cellCompleters.toFixed(1)}
                           </td>
                           <td
-                            className={`p-1.5 md:p-2 font-medium ${
-                              st.verdict === "ok"
-                                ? "text-teal-700"
-                                : st.verdict === "single"
-                                  ? "text-orange-600"
-                                  : "text-red-600"
+                            className={`p-1.5 md:p-2 ${
+                              !spilloverOn
+                                ? "text-gray-400"
+                                : st.verdict === "ok"
+                                  ? "font-medium text-teal-700"
+                                  : st.verdict === "single"
+                                    ? "font-medium text-orange-600"
+                                    : "font-medium text-red-600"
                             }`}
                           >
                             {st.verdict === "ok"
@@ -1844,11 +1846,13 @@ export default function PowerCurves() {
                 </div>
                 <p
                   className={`text-xs mt-2 ${
-                    currentSpill.siteSummary.ok === 0
-                      ? "text-red-700"
-                      : currentSpill.siteSummary.single > 0
-                        ? "text-orange-700"
-                        : "text-teal-700"
+                    !spilloverOn
+                      ? "text-gray-500"
+                      : currentSpill.siteSummary.ok === 0
+                        ? "text-red-700"
+                        : currentSpill.siteSummary.single > 0
+                          ? "text-orange-700"
+                          : "text-teal-700"
                   }`}
                 >
                   {currentSpill.siteSummary.ok} of{" "}
