@@ -831,10 +831,11 @@ export function createModel(s) {
     // Effective cluster size is the AURORA users per contributing clinician, which is
     // patientsPerCluster under cluster randomization but lower under hybrid, where a
     // no-ROM clinician contributes only its app-only patients.
+    // cvAdjTotal, not 1 + clusterSizeCV^2: this analysis pools users across every site,
+    // so the cluster sizes it averages over vary both within and between sites. The
+    // between-site term belongs here for the same reason it belongs in the outcome path.
     const usersPerCluster = nUsers / nClustersUsed;
-    const designEffect =
-      (1 + (usersPerCluster - 1) * s.iccHamd) *
-      (1 + s.clusterSizeCV * s.clusterSizeCV);
+    const designEffect = (1 + (usersPerCluster - 1) * s.iccHamd) * cvAdjTotal;
 
     const seRaw = Math.sqrt(1 / (nFocal * info) + 1 / (nReference * info));
     const se = seRaw * Math.sqrt(designEffect);
@@ -930,7 +931,11 @@ export function createModel(s) {
     const J = alloc.nClusters;
     const m = s.patientsPerCluster;
     const keep = 1 - s.controlAttrition;
-    const cvAdj = 1 + s.clusterSizeCV * s.clusterSizeCV;
+    // As in the DIF substudy: these estimands are computed on counts aggregated over
+    // every site, so the total cluster-size variation applies, not the within-site part
+    // alone. (The site table below splits P/M/K per site for FEASIBILITY only; the
+    // variance here is not pooled across strata the way hamd() and retention() are.)
+    const cvAdj = cvAdjTotal;
     const rho = s.iccHamd;
     const de = (size) => (1 + (size * keep - 1) * rho) * cvAdj;
     const betw = (Jk, nk) =>

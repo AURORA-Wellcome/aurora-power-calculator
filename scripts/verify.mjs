@@ -18,6 +18,7 @@ import { defaults } from "../src/defaults.js";
 import {
   DEFAULT_ROSTER,
   parseRoster,
+  rosterFromSettings,
   formatRoster,
   scaleRoster,
   allocateRoster,
@@ -1937,9 +1938,15 @@ section("8. Fairness / DIF substudy");
   // full-sample N with the post-attrition cluster size would understate the SE.
   {
     const d = m3.dif(N);
+    // Total cluster-size variation, between-site and within-site in quadrature - the same
+    // cvAdjTotal the outcome path uses. This analysis pools users across every site, so
+    // the between-site term applies. The claim under test is the CLUSTER SIZE: randomized,
+    // not post-attrition. The CV factor is just carried through both sides.
+    const cvSite = cvBetween(rosterFromSettings(conf));
+    const cvAdjTotal =
+      1 + cvSite * cvSite + conf.clusterSizeCV * conf.clusterSizeCV;
     const expected =
-      (1 + (conf.patientsPerCluster - 1) * conf.iccHamd) *
-      (1 + conf.clusterSizeCV * conf.clusterSizeCV);
+      (1 + (conf.patientsPerCluster - 1) * conf.iccHamd) * cvAdjTotal;
     close(
       "DIF design effect uses randomized cluster size",
       d.designEffect,
@@ -1950,11 +1957,33 @@ section("8. Fairness / DIF substudy");
       (1 +
         (conf.patientsPerCluster * (1 - conf.controlAttrition) - 1) *
           conf.iccHamd) *
-      (1 + conf.clusterSizeCV * conf.clusterSizeCV);
+      cvAdjTotal;
     ok(
       "DIF design effect exceeds the HAM-D (post-attrition) one",
       d.designEffect > postAttrition,
       `${d.designEffect.toFixed(4)} vs ${postAttrition.toFixed(4)}`,
+    );
+  }
+
+  // The between-site term was dropped here for several commits after site stratification
+  // landed, because this path recomputed 1 + clusterSizeCV^2 locally instead of reusing
+  // cvAdjTotal. A roster with real between-site spread must move the design effect.
+  {
+    const flat = { ...conf, designArms: 3, siteRoster: "1000-100" }; // every site identical
+    const varied = { ...conf, designArms: 3 };
+    const deFlat = createModel(flat).dif(N).designEffect;
+    const deVaried = createModel(varied).dif(N).designEffect;
+    ok(
+      "DIF design effect includes between-site cluster-size variation",
+      deVaried > deFlat,
+      `${deVaried.toFixed(6)} (eTable 1 roster) > ${deFlat.toFixed(6)} (uniform roster)`,
+    );
+    const sFlat = createModel({ ...flat, mixedShare: 0.3 }).spillover(N);
+    const sVaried = createModel({ ...varied, mixedShare: 0.3 }).spillover(N);
+    ok(
+      "spillover SE includes between-site cluster-size variation",
+      sVaried.primary.se > sFlat.primary.se,
+      `${sVaried.primary.se.toFixed(6)} > ${sFlat.primary.se.toFixed(6)}`,
     );
   }
 

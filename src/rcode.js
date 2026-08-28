@@ -448,7 +448,9 @@ calc_dif <- function(total_n) {
   # dichotomous item) recovers the familiar SE(b) ~ 2/sqrt(n).
   # The design effect uses the randomized cluster size, matching the sample being used.
   users_per_cluster <- n_users / n_clusters_used
-  design_effect <- (1 + (users_per_cluster - 1) * icc_hamd) * (1 + cluster_size_cv^2)
+  # cv_total, not cluster_size_cv alone: this analysis pools users across every site,
+  # so the between-site component of cluster-size variation applies here too.
+  design_effect <- (1 + (users_per_cluster - 1) * icc_hamd) * (1 + cv_total^2)
   se_raw <- sqrt(1 / (n_focal * dif_item_info) + 1 / (n_reference * dif_item_info))
   se <- se_raw * sqrt(design_effect)
 
