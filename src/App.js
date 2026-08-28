@@ -530,7 +530,10 @@ export default function PowerCurves() {
   const critLabel = `${currentHamd.crit.toFixed(3)} (${currentHamd.critMethod})`;
   const exploratory = analysisFraming === "exploratory";
   // Intervals are reported at the same level as the test, so alpha drives both.
-  const ciLevel = Math.round((1 - alpha) * 100);
+  // Not rounded to an integer: alpha = 0.025 gives a genuine 97.5% interval, and
+  // rounding it to "98%" reads as an error. The unary + drops a trailing ".0" so the
+  // common levels still render as 95% and 99% rather than 95.0% and 99.0%.
+  const ciLevel = +((1 - alpha) * 100).toFixed(1);
 
   // ---------------------------------------------------------------------------
 
