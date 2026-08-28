@@ -541,10 +541,11 @@ export default function PowerCurves() {
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto bg-gray-50 min-h-screen">
       <h1 className="text-xl md:text-2xl font-bold mb-2">
-        AURORA Trial Power Curves
+        AURORA Trial Power Calculator
       </h1>
       <p className="text-gray-600 mb-4 md:mb-6 text-sm md:text-base">
-        Explore minimum detectable effects across sample sizes
+        Precision, detectable effects and feasibility across arms, allocations
+        and sites
       </p>
 
       {/* Current Design Summary */}
