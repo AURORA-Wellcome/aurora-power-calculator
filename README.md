@@ -71,6 +71,15 @@ node scripts/crosscheck-r.mjs 3 > /tmp/three.R   # JS values go to stderr
 Rscript /tmp/three.R
 ```
 
+A second argument overrides settings, which is how the substudies get exercised. The
+spillover block is emitted by both sides only when the substudy is on, so the default
+run stays quiet:
+
+```bash
+node scripts/crosscheck-r.mjs 3 '{"mixedShare":0.3}' > /tmp/spill.R
+Rscript /tmp/spill.R
+```
+
 ### Build
 
 ```bash

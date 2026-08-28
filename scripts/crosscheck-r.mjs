@@ -43,4 +43,21 @@ const d = m.dif(n);
 lines.push(
   `DIF: users=${d.nUsers} focal=${d.nFocal} ref=${d.nReference} adequate=${d.adequate ? "Yes" : "No"} needN=${d.nRequired} DE=${d.designEffect.toFixed(4)} CI=+/-${d.ciHalfWidth.toFixed(3)} mde=${d.mde.toFixed(3)} power=${Math.round(d.power * 100)}%`,
 );
+// The spillover substudy only produces a comparison when it is switched on, and the
+// generated R suppresses its block the same way, so both sides stay quiet at the
+// shipped default of mixedShare = 0.
+const sp = m.spillover(n);
+if (sp.available && sp.M > 0) {
+  const half = (x) => x.ciHalfWidth.toFixed(3);
+  lines.push(
+    `spillover: P=${sp.P} M=${sp.M} K=${sp.K} patients=${sp.patients.join(",")}`,
+  );
+  lines.push(
+    `  primary +/-${half(sp.primary)} (d=${sp.primary.ciEffectSize.toFixed(3)}), B +/-${half(sp.spilloverB)}, C +/-${half(sp.spilloverC)}, pooled +/-${half(sp.spilloverPooled)} mde ${sp.spilloverPooled.mde.toFixed(3)}, direct +/-${half(sp.directEffect)}`,
+  );
+  lines.push(
+    `  sites ${sp.siteSummary.ok} ok / ${sp.siteSummary.single} single / ${sp.siteSummary.none} none, usable ${sp.siteSummary.usableCellCompleters.toFixed(1)} of ${sp.siteSummary.totalCellCompleters.toFixed(1)}`,
+  );
+}
+
 process.stderr.write(lines.join("\n") + "\n");

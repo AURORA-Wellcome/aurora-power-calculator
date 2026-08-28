@@ -99,6 +99,10 @@ dif_threshold_n    <- ${s.difThresholdN}    # minimum N per group for a DIF anal
 dif_target_logits  <- ${s.difTargetLogits}  # DIF magnitude to detect (0.43 ~ 1.0 ETS delta)
 dif_item_info      <- ${s.difItemInfo}   # item information at the targeted ability
 
+# Spillover substudy: share of clinicians running a MIXED panel (some patients on the
+# dashboard, some not). 0 disables it. Three-arm only.
+mixed_share        <- ${s.mixedShare}
+
 contrasts <- ${contrasts}
 
 # ============================================
@@ -333,17 +337,22 @@ if (use_mfrm) meas_mult <- meas_mult * (1 - rater_variance_prop)
 # HAM-D MDE
 # ============================================
 
+hamd_variance <- function() {
+  sigma2_adj <- sigma_hamd^2 * (1 - r2_hamd)
+  ipcw_vif <- 1.2                 # inverse probability of censoring weights
+  rm_gain  <- 1.43                # repeated measures efficiency, 4 timepoints, r ~ 0.5
+  base_variance <- (sigma2_adj * ipcw_vif) / rm_gain
+  list(base_variance = base_variance, net_variance = base_variance * meas_mult)
+}
+
 calc_hamd_mde <- function(total_n, contrast) {
   alloc <- allocation(total_n)
   n1 <- if (is.null(contrast$pooled)) alloc$completers[contrast$a] else sum(alloc$completers[contrast$pooled])
   n2 <- alloc$completers[contrast$b]
 
-  sigma2_adj <- sigma_hamd^2 * (1 - r2_hamd)
-  ipcw_vif <- 1.2                 # inverse probability of censoring weights
-  rm_gain  <- 1.43                # repeated measures efficiency, 4 timepoints, r ~ 0.5
-
-  base_variance <- (sigma2_adj * ipcw_vif) / rm_gain
-  net_variance  <- base_variance * meas_mult
+  hv <- hamd_variance()
+  base_variance <- hv$base_variance
+  net_variance  <- hv$net_variance
 
   cr <- crit_for(contrast, total_n)
   inv_n <- contrast_factor(alloc, contrast, icc_hamd, "completers")
@@ -513,6 +522,98 @@ cat(paste0("  Rules out ICC < ", target_icc, ": ",
 cat(paste0("  Completers:    ", calc_hamd_mde(total_n, contrasts[[1]])$n_completers,
            " after ", round(control_attrition * 100), "% attrition\\n"))
 
+# ============================================
+# Spillover substudy (mixed clinician panels)
+# ============================================
+
+# A third clinician type: pure-ROM (P), mixed (M) and no-ROM (K). Panels are split
+# proportionally to the target allocation, which makes the overall arm allocation
+# invariant to M:
+#   P = pA (J - M),  K = (1 - pA)(J - M),  so P + M + K = J for any M,
+#   A patients = P m + M (m pA) = pA J m,  unchanged. Same for B and C.
+# M is therefore a free dial: it changes only how patients are ARRANGED across
+# clinicians, never how many are in each arm. What it costs is the primary contrast,
+# which loses the clinicians it hands to the mixed group.
+calc_spillover <- function(total_n, share = mixed_share) {
+  if (n_arms < 3) return(NULL)   # no app-only arm to spill onto
+
+  alloc <- allocation(total_n)
+  J     <- alloc$n_clusters
+  m     <- patients_per_cluster
+  keep  <- 1 - control_attrition
+
+  # Total cluster-size variation, as in the DIF substudy: these estimands are computed
+  # on counts aggregated over every site, not pooled across strata.
+  cv_adj <- 1 + cv_total^2
+  rho    <- icc_hamd
+  de     <- function(size) (1 + (size * keep - 1) * rho) * cv_adj
+  betw   <- function(Jk, nk) if (Jk > 0 && nk > 0) de(nk / (Jk * keep)) / nk else Inf
+
+  p  <- arm_weights / sum(arm_weights)
+  pA <- p[1]; pB <- p[2]; pC <- p[3]
+
+  M <- round(share * J)
+  P <- pA * (J - M)
+  K <- (1 - pA) * (J - M)
+
+  # Panel compositions: a mixed panel carries all three conditions, a no-ROM panel only
+  # the two patient-level ones.
+  mix_a <- m * pA; mix_b <- m * pB; mix_c <- m * pC
+  no_b  <- m * pB / (pB + pC)
+  no_c  <- m * pC / (pB + pC)
+
+  n_a_pure <- P * m * keep;     n_a_mix <- M * mix_a * keep
+  n_b_mix  <- M * mix_b * keep; n_b_no  <- K * no_b * keep
+  n_c_mix  <- M * mix_c * keep; n_c_no  <- K * no_c * keep
+
+  net_variance <- hamd_variance()$net_variance
+  cr   <- crit_for(contrasts[[1]], total_n)
+  mult <- cr$z + z_beta
+  out  <- function(factor) {
+    se <- sqrt(net_variance * factor)
+    list(se = se,
+         mde = mult * se,
+         effect_size = mult * se / sigma_hamd,
+         ci_half_width = cr$z * se,
+         ci_effect_size = cr$z * se / sigma_hamd)
+  }
+
+  # Per-site feasibility. The spillover contrast is BETWEEN clinicians, so a site with a
+  # single mixed clinician has its whole contribution confounded with that one
+  # individual's practice, and a site with none contributes nothing. Neither fact is
+  # visible to the variance formula.
+  site_c    <- alloc$site_clinicians
+  per_site  <- lapply(seq_along(site_c),
+                      function(i) allocate_clusters(site_c[i], c(P, M, K), i - 1))
+  mixed_here <- sapply(per_site, function(cells) cells[2])
+  cell_completers <- mixed_here * mix_b * keep
+  verdict <- ifelse(mixed_here == 0, "none", ifelse(mixed_here == 1, "single", "ok"))
+
+  list(M = M, P = round(P), K = round(K),
+       panel_mixed = c(mix_a, mix_b, mix_c),
+       panel_no_rom = c(no_b, no_c),
+       # Allocation must be untouched by M; returned so it can be checked.
+       patients = round(c(n_a_pure / keep + n_a_mix / keep,
+                          n_b_mix  / keep + n_b_no  / keep,
+                          n_c_mix  / keep + n_c_no  / keep)),
+       # Primary contrast kept clean: only never-exposed clinicians supply the controls,
+       # only fully-exposed ones supply the treated patients.
+       primary          = out(betw(P, n_a_pure) + betw(K, n_c_no)),
+       spillover_b      = out(betw(M, n_b_mix) + betw(K, n_b_no)),
+       spillover_c      = out(betw(M, n_c_mix) + betw(K, n_c_no)),
+       spillover_pooled = out(betw(M, n_b_mix + n_c_mix) + betw(K, n_b_no + n_c_no)),
+       # Within a mixed panel the clinician effect is shared, so this isolates the
+       # patient-specific part of the ROM effect from any general practice change.
+       direct_effect    = if (M > 0) out((1 - rho) * (1 / n_a_mix + 1 / n_c_mix))
+                          else list(se = Inf, mde = Inf, effect_size = Inf,
+                                    ci_half_width = Inf, ci_effect_size = Inf),
+       sites_ok     = sum(verdict == "ok"),
+       sites_single = sum(verdict == "single"),
+       sites_none   = sum(verdict == "none"),
+       usable_cell_completers = sum(cell_completers[verdict == "ok"]),
+       total_cell_completers  = sum(cell_completers))
+}
+
 dif <- calc_dif(total_n)
 cat(paste0("\\nFairness / DIF substudy (arms ", paste(arm_names[icc_arms], collapse = " + "), ")\\n"))
 cat(paste0("  AURORA users:  ", dif$n_users, " randomized\\n"))
@@ -524,5 +625,25 @@ cat(paste0("  DIF precision: +/-", round(dif$ci_half_width, 3), " logits (",
            ci_level, "% CI)\\n"))
 cat(paste0("  Detectable:    ", round(dif$mde, 3), " logits at ", round(power * 100), "% power\\n"))
 cat(paste0("  Power at ", dif_target_logits, ": ", round(dif$power * 100), "%\\n"))
+
+spill <- calc_spillover(total_n)
+if (!is.null(spill) && spill$M > 0) {
+  cat(paste0("\\nSpillover substudy (", round(mixed_share * 100), "% mixed panels)\\n"))
+  cat(paste0("  Clinicians:    ", spill$P, " pure / ", spill$M, " mixed / ", spill$K, " no-ROM\\n"))
+  cat(paste0("  Patients/arm:  ", paste(spill$patients, collapse = ", "),
+             " (unchanged by the mixed share)\\n"))
+  cat(paste0("  Primary A-C:   +/-", round(spill$primary$ci_half_width, 3),
+             " (d = ", round(spill$primary$ci_effect_size, 3), ")\\n"))
+  cat(paste0("  Spillover B:   +/-", round(spill$spillover_b$ci_half_width, 3), "\\n"))
+  cat(paste0("  Spillover C:   +/-", round(spill$spillover_c$ci_half_width, 3), "\\n"))
+  cat(paste0("  Pooled:        +/-", round(spill$spillover_pooled$ci_half_width, 3),
+             "   MDE ", round(spill$spillover_pooled$mde, 3), "\\n"))
+  cat(paste0("  Direct effect: +/-", round(spill$direct_effect$ci_half_width, 3),
+             " (within mixed panels)\\n"))
+  cat(paste0("  Sites:         ", spill$sites_ok, " ok / ", spill$sites_single,
+             " single / ", spill$sites_none, " none\\n"))
+  cat(paste0("  Usable cell N: ", round(spill$usable_cell_completers, 1), " of ",
+             round(spill$total_cell_completers, 1), " completers\\n"))
+}
 `;
 }
