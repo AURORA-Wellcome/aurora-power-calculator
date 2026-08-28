@@ -38,6 +38,9 @@ const CONTRAST_COLORS = {
 };
 // Comparison lines (sum-score baseline, two-arm baseline) stay in gray ink so they never
 // compete with the contrast series; they are told apart by dash pattern and weight.
+const PRACTICALITY_NOTE =
+  "The spillover comparison is between clinicians, so a site with a single mixed clinician has its whole contribution confounded with that one person's practice, and contributes nothing usable. Sites are listed smallest last, because that is where the design fails first.";
+
 const INK_MUTED = "#898781";
 const INK_SECONDARY = "#52514e";
 
@@ -86,13 +89,29 @@ const CheckIcon = () => (
 // Deep-linkable section heading. The anchor copies the CURRENT configuration token
 // alongside the fragment, so a link lands on the right panel showing the right numbers -
 // which is what makes it useful for citing a specific figure in a memo.
-function SectionHeading({ id, children, className = "mb-1", onCopy, copied }) {
+function SectionHeading({
+  id,
+  children,
+  className = "mb-1",
+  onCopy,
+  copied,
+  info,
+}) {
   return (
     <h2
       id={id}
       className={`group flex items-center gap-1.5 font-semibold text-sm md:text-base scroll-mt-4 ${className}`}
     >
       <span>{children}</span>
+      {info && (
+        <span
+          className="text-gray-400 hover:text-gray-600 cursor-help font-normal"
+          title={info}
+        >
+          <InfoIcon />
+          <span className="sr-only">{info}</span>
+        </span>
+      )}
       <button
         onClick={() => onCopy(id)}
         title="Copy a link to this section with the current settings"
@@ -1307,6 +1326,9 @@ export default function PowerCurves() {
           className="mb-3"
           onCopy={copyAnchor}
           copied={copiedAnchor === "icc-validation"}
+          info={
+            "Tests whether AURORA-clinician agreement clears the threshold for good reliability. In the three-arm design both AURORA-using arms generate scores alongside clinician ratings; arm-B clinicians simply do not see the output."
+          }
         >
           Intraclass Correlation Validation (arms{" "}
           {currentIcc.armKeys.join(" + ")})
@@ -1371,13 +1393,6 @@ export default function PowerCurves() {
             />
           </div>
         </div>
-        <div className="mt-2 text-xs text-gray-500">
-          Tests if AURORA-clinician agreement exceeds threshold for "good"
-          reliability (intraclass correlation {">"} {targetIcc}).
-          {threeArm
-            ? " In the 3-arm design both the clinician+patient and patient-only arms generate AURORA scores alongside clinician ratings; arm-B clinicians simply do not see the output."
-            : " Treatment arm only."}
-        </div>
       </div>
 
       {/* Site feasibility */}
@@ -1387,16 +1402,15 @@ export default function PowerCurves() {
           className="mb-1"
           onCopy={copyAnchor}
           copied={copiedAnchor === "site-feasibility"}
+          info={
+            "Randomization is stratified by site, so clinicians are allocated within each site and then aggregated. That shifts the realized allocation away from the nominal one by an amount and direction that depend on the roster shape, and it decides whether a site can support a cell at all."
+          }
         >
           Site Feasibility (stratified randomization)
         </SectionHeading>
         <p className="text-xs text-gray-500 mb-3">
-          Randomization is stratified by site, so clinicians are allocated
-          within each site and then aggregated. That shifts the realized
-          allocation away from the nominal one by an amount and direction that
-          depend on the roster shape, and it decides whether a site can support
-          a cell at all. The roster is rescaled to {currentAlloc.nClusters}{" "}
-          clinicians to match the current design.
+          Roster rescaled to {currentAlloc.nClusters} clinicians to match the
+          current design.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 mb-3">
@@ -1540,6 +1554,9 @@ export default function PowerCurves() {
             className={spilloverOn ? "mb-1" : "mb-1 text-gray-500"}
             onCopy={copyAnchor}
             copied={copiedAnchor === "spillover"}
+            info={
+              "A third clinician type: ROM-trained with the dashboard, but only some of their patients on it. Comparing the same arm across clinician types isolates spillover of the clinician's training onto patients who are not on the dashboard. The overall arm allocation is unchanged at every setting; only the arrangement of patients across clinicians changes."
+            }
           >
             Within-Clinician Effect Spillover Substudy
           </SectionHeading>
@@ -1575,15 +1592,6 @@ export default function PowerCurves() {
 
           {spilloverOpen && (
             <>
-              <p className="text-xs text-gray-500 mb-3 mt-2">
-                A third clinician type: ROM-trained with the dashboard, but only
-                some of their patients on it. Comparing the same arm across
-                clinician types isolates spillover of the clinician&apos;s
-                training onto patients who are not on the dashboard. The overall
-                arm allocation is unchanged at every setting; only the
-                arrangement of patients across clinicians changes.
-              </p>
-
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3">
                 <div>
                   <label className={labelCls}>
@@ -1729,16 +1737,16 @@ export default function PowerCurves() {
                 </table>
               </div>
               <div className="mt-3 pt-3 border-t">
-                <h3 className="font-medium text-xs md:text-sm mb-1">
+                <h3 className="font-medium text-xs md:text-sm mb-1 flex items-center gap-1.5">
                   Practicality by site, at {currentSpill.M} mixed panels
+                  <span
+                    className="text-gray-400 hover:text-gray-600 cursor-help font-normal"
+                    title={PRACTICALITY_NOTE}
+                  >
+                    <InfoIcon />
+                    <span className="sr-only">{PRACTICALITY_NOTE}</span>
+                  </span>
                 </h3>
-                <p className="text-xs text-gray-500 mb-2">
-                  The spillover comparison is between clinicians, so a site with
-                  a single mixed clinician has its whole contribution confounded
-                  with that one person&apos;s practice, and contributes nothing
-                  usable. Sites are listed smallest last, because that is where
-                  the design fails first.
-                </p>
                 <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
                   <table className="w-full text-xs md:text-sm min-w-[520px] tabular-nums">
                     <thead>
@@ -1824,15 +1832,12 @@ export default function PowerCurves() {
           className="mb-1"
           onCopy={copyAnchor}
           copied={copiedAnchor === "fairness"}
+          info={
+            "Differential item functioning across subgroups. Only AURORA users produce item responses, so this draws on the same arms as the agreement substudy. It uses all randomized patients, since DIF is assessed on baseline responses rather than follow-up pairs."
+          }
         >
           Measurement Fairness (arms {currentDif.armKeys.join(" + ")})
         </SectionHeading>
-        <p className="text-xs text-gray-500 mb-3">
-          Differential item functioning across subgroups. Only AURORA users
-          produce item responses, so this draws on the same arms as the
-          agreement substudy. It uses all randomized patients, since DIF is
-          assessed on baseline responses rather than follow-up pairs.
-        </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
           <div>
