@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+} from "react";
 import {
   Line,
   XAxis,
@@ -69,6 +75,17 @@ const AnchorIcon = () => (
   <svg {...iconProps} width={13} height={13}>
     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
+);
+
+const ChevronIcon = ({ open }) => (
+  <svg
+    {...iconProps}
+    width={12}
+    height={12}
+    className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+  >
+    <polyline points="6 9 12 15 18 9" />
   </svg>
 );
 
@@ -251,6 +268,20 @@ export default function PowerCurves() {
       mixedShare > 0 ||
       (typeof window !== "undefined" && window.location.hash === "#spillover"),
   );
+
+  // Measured height of the details body, re-measured whenever its contents can change.
+  // "auto" once open and settled, so the panel still reflows if a table grows.
+  const spilloverBodyRef = useRef(null);
+  const [spilloverHeight, setSpilloverHeight] = useState(0);
+  // Once the open transition finishes, hand height back to the browser. Charts inside
+  // resize asynchronously (Recharts measures its own container), so a height pinned at
+  // the value measured before that settles would clip the bottom of the panel.
+  const [spilloverSettled, setSpilloverSettled] = useState(false);
+  useLayoutEffect(() => {
+    const el = spilloverBodyRef.current;
+    if (el) setSpilloverHeight(el.scrollHeight);
+    if (!spilloverOpen) setSpilloverSettled(false);
+  }, [settings, spilloverOpen]);
 
   const [copiedAnchor, setCopiedAnchor] = useState(null);
   const copyAnchor = async (id) => {
@@ -1584,14 +1615,36 @@ export default function PowerCurves() {
             </span>
             <button
               onClick={() => setSpilloverOpen((v) => !v)}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
+              aria-expanded={spilloverOpen}
+              aria-controls="spillover-details"
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
             >
-              {spilloverOpen ? "hide details" : "show details"}
+              <ChevronIcon open={spilloverOpen} />
+              <span className="underline">
+                {spilloverOpen ? "hide details" : "show details"}
+              </span>
             </button>
           </div>
 
-          {spilloverOpen && (
-            <>
+          <div
+            id="spillover-details"
+            aria-hidden={!spilloverOpen}
+            style={{
+              height: spilloverOpen
+                ? spilloverSettled
+                  ? "auto"
+                  : spilloverHeight
+                : 0,
+              opacity: spilloverOpen ? 1 : 0,
+            }}
+            onTransitionEnd={(e) => {
+              if (e.propertyName === "height" && spilloverOpen) {
+                setSpilloverSettled(true);
+              }
+            }}
+            className="overflow-hidden transition-[height,opacity] duration-300 ease-in-out motion-reduce:transition-none"
+          >
+            <div ref={spilloverBodyRef}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3">
                 <div>
                   <label className={labelCls}>
@@ -1820,8 +1873,8 @@ export default function PowerCurves() {
                 Spillover should attenuate the treatment effect, so an estimate
                 with the opposite sign is noise rather than a finding.
               </p>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       )}
 
