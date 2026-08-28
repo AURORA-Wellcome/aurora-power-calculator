@@ -1789,6 +1789,15 @@ export default function PowerCurves() {
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Values are{" "}
+                {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"} in HAM-D
+                points, with Cohen&apos;s d in parentheses. The per-path
+                estimates (onto B, onto C) are much weaker than the pooled one;
+                treat them as descriptive and pre-specify the pooled test.
+                Spillover should attenuate the treatment effect, so an estimate
+                with the opposite sign is noise rather than a finding.
+              </p>
               <div className="mt-3 pt-3 border-t">
                 <h3 className="font-medium text-xs md:text-sm mb-1 flex items-center gap-1.5">
                   Practicality by site, at {currentSpill.M} mixed panels
@@ -1867,16 +1876,6 @@ export default function PowerCurves() {
                   interpretable.
                 </p>
               </div>
-
-              <p className="text-xs text-gray-500 mt-2">
-                Values are{" "}
-                {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"} in HAM-D
-                points, with Cohen&apos;s d in parentheses. The per-path
-                estimates (onto B, onto C) are much weaker than the pooled one;
-                treat them as descriptive and pre-specify the pooled test.
-                Spillover should attenuate the treatment effect, so an estimate
-                with the opposite sign is noise rather than a finding.
-              </p>
             </div>
           </div>
         </div>
