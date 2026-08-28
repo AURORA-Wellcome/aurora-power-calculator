@@ -1518,10 +1518,18 @@ export default function PowerCurves() {
 
       {/* Spillover substudy */}
       {threeArm && (
-        <div className={cardCls}>
+        <div
+          className={
+            spilloverOn
+              ? cardCls
+              : // Muted surface rather than reduced opacity: the toggle inside is still
+                // live, and dimming it wholesale would read as disabled.
+                "bg-gray-50 border border-gray-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6"
+          }
+        >
           <SectionHeading
             id="spillover"
-            className="mb-1"
+            className={spilloverOn ? "mb-1" : "mb-1 text-gray-500"}
             onCopy={copyAnchor}
             copied={copiedAnchor === "spillover"}
           >
