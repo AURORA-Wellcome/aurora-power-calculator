@@ -69,6 +69,14 @@ const AnchorIcon = () => (
   </svg>
 );
 
+const InfoIcon = () => (
+  <svg {...iconProps} width={13} height={13}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
+);
+
 const CheckIcon = () => (
   <svg {...iconProps}>
     <polyline points="20 6 9 17 4 12" />
@@ -1545,11 +1553,18 @@ export default function PowerCurves() {
                 className="h-4 w-4"
               />
               <span className={spilloverOn ? "font-medium" : "text-gray-500"}>
-                {spilloverOn
-                  ? `On - ${currentSpill.M} of ${currentAlloc.nClusters} clinicians run mixed panels`
-                  : `Off - no mixed panels (would use ${Math.round(spilloverPreset * 100)}%)`}
+                {spilloverOn ? "On" : "Off"}
               </span>
             </label>
+            <span
+              className="text-gray-400 hover:text-gray-600 cursor-help"
+              title={
+                "Off is the current design. Turning this on trades precision on the primary contrast for an estimate of how much a trained clinician's practice carries over to their patients who are not on the dashboard."
+              }
+              aria-label="About the spillover substudy"
+            >
+              <InfoIcon />
+            </span>
             <button
               onClick={() => setSpilloverOpen((v) => !v)}
               className="text-xs text-gray-500 hover:text-gray-700 underline"
@@ -1557,15 +1572,6 @@ export default function PowerCurves() {
               {spilloverOpen ? "hide details" : "show details"}
             </button>
           </div>
-
-          {!spilloverOn && (
-            <p className="text-xs text-gray-500">
-              Off is the current design. Turning this on trades precision on the
-              primary contrast for an estimate of how much a trained
-              clinician&apos;s practice carries over to their patients who are
-              not on the dashboard.
-            </p>
-          )}
 
           {spilloverOpen && (
             <>
