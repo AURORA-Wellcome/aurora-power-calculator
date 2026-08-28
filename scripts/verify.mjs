@@ -413,8 +413,17 @@ for (const [name, spec] of Object.entries(BASELINE)) {
 
     close(`[${name}] N=${n} HAM-D MDE`, h.mde, exp.hamd * scale, 1e-9);
     close(`[${name}] N=${n} retention MDE`, r.mde, exp.ret * scale, 1e-8);
-    // The ICC substudy uses a fixed 1.96 and no power term, so it must be unchanged.
-    close(`[${name}] N=${n} ICC half-width`, i.ciHalfWidth, exp.icc, 5e-7);
+    // The ICC substudy carries no power term, so it does not take `scale`. It now
+    // reports at the level alpha sets rather than a hardcoded 1.96, so the captured
+    // baseline scales by the ratio of the two critical values. It takes no multiplicity
+    // adjustment, hence zUnadjusted; this scenario sets smallSampleT false, so there is
+    // no t term to account for either.
+    close(
+      `[${name}] N=${n} ICC half-width`,
+      i.ciHalfWidth,
+      (exp.icc * m.zUnadjusted) / 1.96,
+      5e-7,
+    );
     ok(
       `[${name}] N=${n} ICC observations`,
       i.nObservations === exp.obs,
@@ -874,6 +883,64 @@ section("7. Shipped defaults");
     "3-arm still costs more than 2-arm under the shipped defaults",
     h3.mde > h.mde,
     `${h3.mde.toFixed(3)} vs ${h.mde.toFixed(3)} (+${((h3.mde / h.mde - 1) * 100).toFixed(1)}%)`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+section("7g. ICC substudy confidence level");
+// ---------------------------------------------------------------------------
+// The panel used to hardcode 1.96 (and a "95%" label) while every other panel followed
+// alpha, so setting alpha = 0.01 produced a page reporting 99% intervals everywhere
+// except here. It is an estimation objective, so it takes no MULTIPLICITY adjustment -
+// which is not the same thing as always being 95%.
+
+{
+  const base = { ...defaults, siteRoster: DEFAULT_ROSTER };
+  const N = defaults.nClinicians * defaults.patientsPerCluster;
+
+  // The label and the number come from one value, so they cannot drift apart.
+  const d = createModel(base).icc(N);
+  close("crit is consistent with the half-width", d.ciHalfWidth / d.seIcc, d.crit, 1e-12);
+
+  // Without the t correction the critical value is exactly the two-sided normal quantile.
+  const noT = createModel({ ...base, smallSampleT: false }).icc(N);
+  close(
+    "no t: crit is the unadjusted normal quantile",
+    noT.crit,
+    normInv(1 - defaults.alpha / 2),
+    1e-12,
+  );
+
+  // With it on (the shipped default) it is the t at the same tail, so slightly wider.
+  const df = Math.round(N / defaults.patientsPerCluster) - 2;
+  close("t on: crit is t at the same tail", d.crit, tQuantile(0.975, df), 1e-12);
+  ok("t correction widens the interval", d.crit > noT.crit, `${d.crit.toFixed(4)} > ${noT.crit.toFixed(4)}`);
+  ok("crit is labelled with its df", d.critMethod === `unadjusted, t(${df})`, d.critMethod);
+
+  // The whole point: alpha moves the interval, and moves it by exactly the quantile ratio.
+  const a01 = createModel({ ...base, smallSampleT: false, alpha: 0.01 }).icc(N);
+  ok(
+    "alpha 0.01 widens the ICC interval",
+    a01.ciHalfWidth > noT.ciHalfWidth,
+    `${a01.ciHalfWidth.toFixed(4)} vs ${noT.ciHalfWidth.toFixed(4)}`,
+  );
+  close(
+    "half-width scales exactly with the critical value",
+    a01.ciHalfWidth / noT.ciHalfWidth,
+    normInv(1 - 0.01 / 2) / normInv(1 - defaults.alpha / 2),
+    1e-12,
+  );
+  close("standard error is untouched by alpha", a01.seIcc, noT.seIcc, 1e-12);
+
+  // No arm-level multiplicity may leak in: three arms, confirmatory, every rule.
+  const three = { ...base, designArms: 3, analysisFraming: "confirmatory" };
+  const widths = ["dunnett", "bonferroni", "none"].map(
+    (multiplicity) => createModel({ ...three, multiplicity }).icc(N).ciHalfWidth,
+  );
+  ok(
+    "multiplicity rule does not touch the ICC interval",
+    Math.abs(widths[0] - widths[1]) < 1e-12 && Math.abs(widths[1] - widths[2]) < 1e-12,
+    widths.map((w) => w.toFixed(6)).join(" / "),
   );
 }
 

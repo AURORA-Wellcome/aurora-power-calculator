@@ -755,7 +755,24 @@ export function createModel(s) {
 
     const seIcc =
       (1 - s.expectedIcc * s.expectedIcc) * Math.sqrt(2 / (nEffective - 1));
-    const ciHalfWidth = 1.96 * seIcc;
+
+    // An estimation objective rather than a hypothesis test, so it sits in no alpha
+    // family and takes no arm-level multiplicity adjustment. It is still reported at the
+    // level alpha sets, like every other panel: "no multiplicity" is not "always 95%".
+    // Same convention as the DIF substudy, small-sample t included, since the clustering
+    // that motivates the correction is present here too (this panel computes its own
+    // design effect from it a few lines up).
+    let crit = zUnadjusted;
+    let critMethod = "unadjusted";
+    if (s.smallSampleT) {
+      const df = dfFor(totalN);
+      if (df > 2) {
+        crit = tQuantile(normCdf(crit), df);
+        critMethod += `, t(${df})`;
+      }
+    }
+
+    const ciHalfWidth = crit * seIcc;
     const lowerBound = s.expectedIcc - ciHalfWidth;
 
     return {
@@ -765,6 +782,8 @@ export function createModel(s) {
       nObservations: Math.round(nObservations),
       nEffective: Math.round(nEffective),
       seIcc,
+      crit,
+      critMethod,
       ciHalfWidth,
       lowerBound,
       upperBound: s.expectedIcc + ciHalfWidth,

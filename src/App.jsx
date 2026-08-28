@@ -2342,7 +2342,7 @@ export default function PowerCurves() {
           {currentIcc.armKeys.join(" + ")})
         </SectionHeading>
         <p className="text-xs text-gray-500 mb-2 md:mb-3">
-          95% confidence interval precision for AURORA-clinician agreement
+          {ciLevel}% confidence interval precision for AURORA-clinician agreement
           (target: rule out intraclass correlation {"<"} {targetIcc})
         </p>
         <ResponsiveContainer
@@ -2366,7 +2366,7 @@ export default function PowerCurves() {
             />
             <YAxis
               label={{
-                value: "95% CI half-width (±)",
+                value: `${ciLevel}% CI half-width (±)`,
                 angle: -90,
                 position: "insideLeft",
                 style: { textAnchor: "middle" },

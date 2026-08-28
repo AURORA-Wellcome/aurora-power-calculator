@@ -273,6 +273,11 @@ control_w   <- arm_weights[n_arms]
 active_lams <- sqrt(arm_weights[-n_arms] / (arm_weights[-n_arms] + control_w))
 
 z_unadjusted <- qnorm(1 - alpha / 2)
+
+# Reported CI level. Kept to one decimal rather than rounded to an integer: alpha =
+# 0.025 is a genuine 97.5% interval and "98%" would read as an error.
+ci_pct   <- round((1 - alpha) * 100, 1)
+ci_level <- if (ci_pct == round(ci_pct)) as.integer(ci_pct) else ci_pct
 n_pairwise   <- sum(sapply(contrasts, function(c) c$family != "pooled"))
 z_bonferroni <- qnorm(1 - alpha / (2 * n_pairwise))
 z_dunnett    <- if (n_arms == 2) z_unadjusted else dunnett_crit(active_lams, alpha)
@@ -405,10 +410,19 @@ calc_icc_validation <- function(total_n) {
   n_effective <- n_observations / design_effect
 
   se_icc <- (1 - expected_icc^2) * sqrt(2 / (n_effective - 1))
-  ci_half_width <- 1.96 * se_icc
+
+  # An estimation objective, so no arm-level multiplicity - but still reported at the
+  # level alpha sets. Same convention as the DIF substudy below.
+  z <- z_unadjusted
+  if (small_sample_t) {
+    df <- round(total_n / patients_per_cluster) - n_arms
+    if (df > 2) z <- t_quantile(pnorm(z), df)
+  }
+  ci_half_width <- z * se_icc
 
   list(n_observations = round(n_observations),
        ci_half_width = ci_half_width,
+       crit = z,
        lower_bound = expected_icc - ci_half_width,
        upper_bound = expected_icc + ci_half_width,
        can_rule_out_poor = (expected_icc - ci_half_width) > target_icc)
@@ -478,7 +492,7 @@ for (ct in contrasts) {
   cat(paste0(ct$id, "  [", h$method, ", crit = ", round(h$crit, 4),
              ifelse(within, ", within-clinician", ""), "]\\n"))
   cat(paste0("  HAM-D:     +/-", round(h$ci_half_width, 3), " points (d = ",
-             round(h$ci_effect_size, 3), ", ", round((1 - alpha) * 100), "% CI)",
+             round(h$ci_effect_size, 3), ", ", ci_level, "% CI)",
              "   MDE ", round(h$mde, 3), " (d = ", round(h$effect_size, 3), ")\\n"))
   cat(paste0("  Retention: +/-", round(r$ci_half_width_pp, 2), " pp (h = ",
              round(r$ci_effect_h, 3), ")",
@@ -489,7 +503,8 @@ for (ct in contrasts) {
 icc <- calc_icc_validation(total_n)
 cat(paste0("\\nICC substudy (arms ", paste(arm_names[icc_arms], collapse = " + "), ")\\n"))
 cat(paste0("  Observations:  ", icc$n_observations, "\\n"))
-cat(paste0("  95% CI:        ", round(icc$lower_bound, 3), " - ", round(icc$upper_bound, 3), "\\n"))
+cat(paste0("  ", formatC(paste0(ci_level, "% CI:"), width = -15),
+           round(icc$lower_bound, 3), " - ", round(icc$upper_bound, 3), "\\n"))
 cat(paste0("  CI half-width: +/-", round(icc$ci_half_width, 4), "\\n"))
 cat(paste0("  Rules out ICC < ", target_icc, ": ",
            ifelse(icc$can_rule_out_poor, "Yes", "No"), "\\n"))
@@ -504,7 +519,7 @@ cat(paste0("  Subgroups:     ", dif$n_focal, " focal vs ", dif$n_reference,
 cat(paste0("  Meets ", dif_threshold_n, "/group: ", ifelse(dif$adequate, "Yes", "No"),
            ifelse(dif$adequate, "", paste0(" (needs about N=", dif$n_required, ")")), "\\n"))
 cat(paste0("  DIF precision: +/-", round(dif$ci_half_width, 3), " logits (",
-           round((1 - alpha) * 100), "% CI)\\n"))
+           ci_level, "% CI)\\n"))
 cat(paste0("  Detectable:    ", round(dif$mde, 3), " logits at ", round(power * 100), "% power\\n"))
 cat(paste0("  Power at ", dif_target_logits, ": ", round(dif$power * 100), "%\\n"))
 `;
