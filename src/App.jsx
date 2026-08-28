@@ -367,6 +367,13 @@ export default function PowerCurves() {
   const [webROutput, setWebROutput] = useState("");
   const [webRInstance, setWebRInstance] = useState(null);
 
+  // Pinned, not "latest". This runtime executes the R that independently reproduces every
+  // displayed number, so leaving it floating meant the verification could change under a
+  // reader with no commit here - and /latest is not even a tagged build, it currently
+  // carries no version string and differs from v0.6.0. To upgrade, bump this one URL and
+  // re-run the R panel; scripts/crosscheck-r.mjs checks the same code against local R.
+  const WEBR_VERSION = "v0.6.0";
+
   // Load WebR dynamically via script tag
   const loadWebR = () => {
     return new Promise((resolve, reject) => {
@@ -377,7 +384,7 @@ export default function PowerCurves() {
       const script = document.createElement("script");
       script.type = "module";
       script.textContent = `
-        import { WebR } from 'https://webr.r-wasm.org/latest/webr.mjs';
+        import { WebR } from 'https://webr.r-wasm.org/${WEBR_VERSION}/webr.mjs';
         window.WebR = WebR;
         window.dispatchEvent(new Event('webr-loaded'));
       `;

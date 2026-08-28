@@ -18,7 +18,7 @@ Interactive web application for exploring the precision and minimum detectable e
 - **Allocation presets** matching the study design memo: `B.1` 33/33/33, `B.2` 50/25/25, `B.3` 40/30/30. Under hybrid, B.3 is the recommendation: it ties the balanced 45/27.5/27.5 allocation on the binding A-vs-C contrast (1.396 vs 1.395 at 110 clinicians) and beats it on B-vs-C and on the pooled contrast, because equalising the contrasts means giving back the free advantage hybrid hands to B-vs-C.
 - **Power for an assumed effect**: alongside the MDE, a direct power readout for a specified HAM-D difference.
 - **Optional small-sample t correction**, with the cluster-level degrees of freedom displayed.
-- **R code for verification**: a self-contained base-R script that reproduces every displayed number, runnable in the browser via WebR or pasted into a local R session.
+- **R code for verification**: a self-contained base-R script that reproduces every displayed number, runnable in the browser via WebR or pasted into a local R session. The WebR runtime is pinned to a specific version in `src/App.jsx` rather than tracking `latest`, so what a reader's browser executes cannot change without a commit here.
 - **Linkable configurations**: the address bar always carries a token encoding the full configuration, so any view can be shared or pasted into a document and reopened exactly. A "Copy link" button puts it on the clipboard. Following a link overrides locally saved settings.
 - **Persistent Settings**: preferences are saved locally and restored on return visits.
 
