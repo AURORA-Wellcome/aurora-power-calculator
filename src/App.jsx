@@ -17,7 +17,7 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import { createModel, cohensH } from "./calc";
+import { createModel, cohensH, ARM_LABELS } from "./calc";
 import { parseRoster, feasibility } from "./sites";
 import { buildRCode } from "./rcode";
 import { defaults } from "./defaults";
@@ -42,6 +42,19 @@ const CONTRAST_COLORS = {
   // adding a 4th chart colour that has not been validated for colourblind separation.
   PC: "#52514e",
 };
+// Text rendering of the same series identity. CONTRAST_COLORS above is validated as a
+// CHART palette, where a stroke is a graphical object and clears its 3:1 bar comfortably.
+// As 12px text those hues run 3.3:1 to 4.45:1, under the 4.5:1 AA bar, so the one place
+// a series colour labels text (the sample size table header) uses these darker variants
+// instead. Same hues, same ordering, so the chart-to-header association still reads; the
+// validated palette itself is left exactly as it is.
+const CONTRAST_TEXT_COLORS = {
+  AC: "#2264b8",
+  BC: "#b8471a",
+  AB: "#127954",
+  PC: CONTRAST_COLORS.PC, // already 7.8:1
+};
+
 // Comparison lines (sum-score baseline, two-arm baseline) stay in gray ink so they never
 // compete with the contrast series; they are told apart by dash pattern and weight.
 const PRACTICALITY_NOTE =
@@ -135,7 +148,7 @@ function SectionHeading({
       <span>{children}</span>
       {info && (
         <span
-          className="text-gray-500 hover:text-gray-700 cursor-help font-normal"
+          className="text-gray-600 hover:text-gray-700 cursor-help font-normal"
           title={info}
         >
           <InfoIcon />
@@ -148,8 +161,8 @@ function SectionHeading({
         aria-label="Copy a link to this section with the current settings"
         className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-100 ${
           copied
-            ? "text-green-600 opacity-100"
-            : "text-gray-500 hover:text-gray-700"
+            ? "text-green-700 opacity-100"
+            : "text-gray-600 hover:text-gray-700"
         }`}
       >
         {copied ? <CheckIcon /> : <AnchorIcon />}
@@ -608,7 +621,7 @@ export default function PowerCurves() {
               {threeArm ? "3-arm" : "2-arm"})
             </SectionHeading>
             {threeArm && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-gray-600">
                 Showing{" "}
                 <span className="font-medium text-gray-700">
                   {activeContrast.label}
@@ -618,7 +631,7 @@ export default function PowerCurves() {
           </section>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-4 text-xs md:text-sm">
             <div className="bg-blue-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {exploratory
                   ? "HAM-D Precision"
                   : "HAM-D Min Detectable Effect"}
@@ -628,31 +641,31 @@ export default function PowerCurves() {
                   ? `±${currentHamd.ciHalfWidth.toFixed(2)} pts`
                   : `${currentHamd.mde.toFixed(2)} pts`}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {exploratory
                   ? `d = ${currentHamd.ciEffectSize.toFixed(2)} · ${ciLevel}% CI`
                   : `d = ${currentHamd.effectSize.toFixed(2)}`}
               </div>
               {(useRasch || useMFRM) && (
-                <div className="text-xs text-green-600">
+                <div className="text-xs text-green-700">
                   (was {currentHamd.baselineMDE?.toFixed(2)} pts)
                 </div>
               )}
               {exploratory && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-600">
                   MDE {currentHamd.mde.toFixed(2)} (d ={" "}
                   {currentHamd.effectSize.toFixed(2)})
                 </div>
               )}
               {threeArm && (
-                <div className="text-xs text-orange-600">
+                <div className="text-xs text-orange-700">
                   {threeArmCost >= 0 ? "+" : ""}
                   {threeArmCost.toFixed(1)}% vs 2-arm
                 </div>
               )}
             </div>
             <div className="bg-green-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {exploratory
                   ? "Retention Precision"
                   : "Retention Min Detectable Effect"}
@@ -662,7 +675,7 @@ export default function PowerCurves() {
                   ? `±${currentRetention.ciHalfWidth.toFixed(1)} pp`
                   : `${currentRetention.mde.toFixed(1)} pp`}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 h ={" "}
                 {(exploratory
                   ? currentRetention.ciEffectSizeH
@@ -670,7 +683,7 @@ export default function PowerCurves() {
                 ).toFixed(2)}
                 {exploratory ? ` · ${ciLevel}% CI` : ""}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {currentRetention.treatmentRate.toFixed(1)}% vs{" "}
                 {currentRetention.controlRate}%
                 {exploratory
@@ -682,11 +695,11 @@ export default function PowerCurves() {
               </div>
             </div>
             <div className="bg-purple-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">Clusters</div>
+              <div className="text-gray-600 text-xs">Clusters</div>
               <div className="text-lg md:text-xl font-bold text-purple-700">
                 {currentHamd.nClusters}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {clusterSplit.map((c) => `${c.n} ${c.short}`).join(" / ")}
               </div>
               {threeArm && randomization === "hybrid" && (
@@ -696,18 +709,18 @@ export default function PowerCurves() {
               )}
             </div>
             <div className="bg-orange-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">Completers</div>
+              <div className="text-gray-600 text-xs">Completers</div>
               <div className="text-lg md:text-xl font-bold text-orange-700">
                 {currentHamd.nCompleters}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 after {(controlAttrition * 100).toFixed(0)}% attrition
               </div>
             </div>
             <div
               className={`p-2 md:p-3 rounded ${useRasch || useMFRM ? "bg-green-50" : "bg-gray-50"}`}
             >
-              <div className="text-gray-500 text-xs">Measurement</div>
+              <div className="text-gray-600 text-xs">Measurement</div>
               <div className="text-sm font-bold text-gray-700">
                 {useMFRM
                   ? "Multi-Facet Rasch"
@@ -716,7 +729,7 @@ export default function PowerCurves() {
                     : "Sum score"}
               </div>
               {(useRasch || useMFRM) && (
-                <div className="text-xs text-green-600">
+                <div className="text-xs text-green-700">
                   -{currentHamd.varianceReduction?.toFixed(1)}% variance
                 </div>
               )}
@@ -724,7 +737,7 @@ export default function PowerCurves() {
             <div
               className={`p-2 md:p-3 rounded ${currentIcc.canRuleOutPoor ? "bg-teal-50" : "bg-red-50"}`}
             >
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 Intraclass Correlation Precision
               </div>
               <div
@@ -732,7 +745,7 @@ export default function PowerCurves() {
               >
                 ±{currentIcc.ciHalfWidth.toFixed(3)}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 {currentIcc.nObservations} obs (arm
                 {currentIcc.armKeys.length > 1 ? "s" : ""}{" "}
                 {currentIcc.armKeys.join("+")})
@@ -769,7 +782,7 @@ export default function PowerCurves() {
                     <div className="text-gray-600">
                       crit {h.crit.toFixed(3)} · {h.critMethod}
                       {h.withinCluster && (
-                        <span className="text-teal-600">
+                        <span className="text-teal-700">
                           {" "}
                           · within-clinician
                         </span>
@@ -812,8 +825,8 @@ export default function PowerCurves() {
                 onClick={copyLink}
                 className={`p-1.5 rounded hover:bg-gray-100 ${
                   copied
-                    ? "text-green-600"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "text-green-700"
+                    : "text-gray-600 hover:text-gray-700"
                 }`}
                 title={
                   copied
@@ -833,8 +846,11 @@ export default function PowerCurves() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3 pb-3 border-b">
             <div>
-              <label className={labelCls}>Analysis framing</label>
+              <label className={labelCls} htmlFor="s-analysisFraming">
+                Analysis framing
+              </label>
               <select
+                id="s-analysisFraming"
                 value={analysisFraming}
                 onChange={(e) => set("analysisFraming")(e.target.value)}
                 className={selectCls}
@@ -846,8 +862,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Charts show</label>
+              <label className={labelCls} htmlFor="s-chartMetric">
+                Charts show
+              </label>
               <select
+                id="s-chartMetric"
                 value={chartMetric}
                 onChange={(e) => set("chartMetric")(e.target.value)}
                 className={selectCls}
@@ -856,7 +875,7 @@ export default function PowerCurves() {
                 <option value="mde">Min detectable effect</option>
               </select>
             </div>
-            <div className="col-span-2 text-xs text-gray-500 flex items-center">
+            <div className="col-span-2 text-xs text-gray-600 flex items-center">
               {exploratory
                 ? "No confirmatory claim, so no multiplicity adjustment is applied. Size the study on precision: the CI half-width does not depend on alpha or multiplicity at all."
                 : "Confirmatory: arm-level multiplicity is applied to the active-vs-control family."}
@@ -865,8 +884,11 @@ export default function PowerCurves() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
             <div>
-              <label className={labelCls}>Design</label>
+              <label className={labelCls} htmlFor="s-designArms">
+                Design
+              </label>
               <select
+                id="s-designArms"
                 value={designArms}
                 onChange={(e) => set("designArms")(parseInt(e.target.value))}
                 className={selectCls}
@@ -879,8 +901,11 @@ export default function PowerCurves() {
             {threeArm ? (
               <>
                 <div>
-                  <label className={labelCls}>Randomization</label>
+                  <label className={labelCls} htmlFor="s-randomization">
+                    Randomization
+                  </label>
                   <select
+                    id="s-randomization"
                     value={randomization}
                     onChange={(e) => set("randomization")(e.target.value)}
                     className={selectCls}
@@ -937,6 +962,9 @@ export default function PowerCurves() {
                       <input
                         key={key}
                         type="number"
+                        // The shared "Allocation" label above cannot name three boxes.
+                        // ARM_LABELS keeps these in step with the arm names elsewhere.
+                        aria-label={`Allocation weight for ${ARM_LABELS[`${key.slice(-1)}3`]}`}
                         min="1"
                         max="10"
                         step="1"
@@ -954,13 +982,14 @@ export default function PowerCurves() {
                   still communicates what WOULD apply if the framing changed, so removing
                   it would hide a live consequence of the framing choice. */}
                 <div className={exploratory ? "opacity-50" : ""}>
-                  <label className={labelCls}>
+                  <label className={labelCls} htmlFor="s-multiplicity">
                     Arm-level multiplicity
                     {exploratory && (
                       <span className="text-gray-600"> (not applied)</span>
                     )}
                   </label>
                   <select
+                    id="s-multiplicity"
                     value={multiplicity}
                     onChange={(e) => set("multiplicity")(e.target.value)}
                     className={`${selectCls} ${
@@ -983,8 +1012,11 @@ export default function PowerCurves() {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Contrast shown</label>
+                  <label className={labelCls} htmlFor="s-selectedContrast">
+                    Contrast shown
+                  </label>
                   <select
+                    id="s-selectedContrast"
                     value={selectedContrast}
                     onChange={(e) => set("selectedContrast")(e.target.value)}
                     className={selectCls}
@@ -999,8 +1031,11 @@ export default function PowerCurves() {
               </>
             ) : (
               <div>
-                <label className={labelCls}>Tx:Ctrl Ratio</label>
+                <label className={labelCls} htmlFor="s-treatmentRatio">
+                  Tx:Ctrl Ratio
+                </label>
                 <select
+                  id="s-treatmentRatio"
                   value={treatmentRatio}
                   onChange={(e) =>
                     set("treatmentRatio")(parseInt(e.target.value))
@@ -1032,7 +1067,7 @@ export default function PowerCurves() {
               not modelled here.
             </div>
           )}
-          <div className="mt-2 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-gray-600">
             Cluster split:{" "}
             <span className="font-medium text-gray-700">
               {clusterSplit.map((c) => `${c.label} ${c.n}`).join(" · ")}
@@ -1065,8 +1100,11 @@ export default function PowerCurves() {
           </SectionHeading>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
             <div>
-              <label className={labelCls}>Power</label>
+              <label className={labelCls} htmlFor="s-power">
+                Power
+              </label>
               <select
+                id="s-power"
                 value={power}
                 onChange={(e) => set("power")(parseFloat(e.target.value))}
                 className={selectCls}
@@ -1079,8 +1117,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Alpha (per outcome)</label>
+              <label className={labelCls} htmlFor="s-alpha">
+                Alpha (per outcome)
+              </label>
               <select
+                id="s-alpha"
                 value={alpha}
                 onChange={(e) => set("alpha")(parseFloat(e.target.value))}
                 className={selectCls}
@@ -1091,8 +1132,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Clinicians</label>
+              <label className={labelCls} htmlFor="s-nClinicians">
+                Clinicians
+              </label>
               <select
+                id="s-nClinicians"
                 value={nClinicians}
                 onChange={(e) => set("nClinicians")(parseInt(e.target.value))}
                 className={selectCls}
@@ -1108,8 +1152,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Patients/Clinician</label>
+              <label className={labelCls} htmlFor="s-patientsPerCluster">
+                Patients/Clinician
+              </label>
               <select
+                id="s-patientsPerCluster"
                 value={patientsPerCluster}
                 onChange={(e) =>
                   set("patientsPerCluster")(parseInt(e.target.value))
@@ -1124,8 +1171,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Cluster Size Variation</label>
+              <label className={labelCls} htmlFor="s-clusterSizeCV">
+                Cluster Size Variation
+              </label>
               <select
+                id="s-clusterSizeCV"
                 value={clusterSizeCV}
                 onChange={(e) =>
                   set("clusterSizeCV")(parseFloat(e.target.value))
@@ -1139,8 +1189,11 @@ export default function PowerCurves() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Control Attrition</label>
+              <label className={labelCls} htmlFor="s-controlAttrition">
+                Control Attrition
+              </label>
               <select
+                id="s-controlAttrition"
                 value={controlAttrition}
                 onChange={(e) =>
                   set("controlAttrition")(parseFloat(e.target.value))
@@ -1292,17 +1345,17 @@ export default function PowerCurves() {
                 }
                 className="w-full"
               />
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-600">
                 Power for {activeContrast.short}:{" "}
                 <span
-                  className={`font-medium ${currentPower >= power ? "text-green-600" : "text-red-600"}`}
+                  className={`font-medium ${currentPower >= power ? "text-green-700" : "text-red-600"}`}
                 >
                   {(currentPower * 100).toFixed(0)}%
                 </span>
               </div>
             </div>
           </div>
-          <div className="mt-2 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-gray-600">
             {exploratory ? (
               <>
                 Exploratory framing: no efficacy claim, so no multiplicity
@@ -1359,7 +1412,7 @@ export default function PowerCurves() {
             ))}
             <div className="text-xs md:text-sm text-gray-600">
               {(useRasch || useMFRM) && (
-                <span className="text-green-600 font-medium">
+                <span className="text-green-700 font-medium">
                   -{currentHamd.varianceReduction?.toFixed(1)}% var → MDE:{" "}
                   {currentHamd.mde.toFixed(2)} pts
                 </span>
@@ -1421,7 +1474,7 @@ export default function PowerCurves() {
                   disabled={!useMFRM}
                 />
               </div>
-              <div className="text-xs text-gray-500 items-center hidden md:flex">
+              <div className="text-xs text-gray-600 items-center hidden md:flex">
                 <div>
                   <div>
                     <strong>Rasch Partial Credit:</strong> Interval scoring
@@ -1481,8 +1534,11 @@ export default function PowerCurves() {
               />
             </div>
             <div>
-              <label className={labelCls}>Follow-ups</label>
+              <label className={labelCls} htmlFor="s-nFollowups">
+                Follow-ups
+              </label>
               <select
+                id="s-nFollowups"
                 value={nFollowups}
                 onChange={(e) => set("nFollowups")(parseInt(e.target.value))}
                 className={selectCls}
@@ -1527,7 +1583,7 @@ export default function PowerCurves() {
           >
             Site Feasibility (stratified randomization)
           </SectionHeading>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-gray-600 mb-3">
             Roster rescaled to {currentAlloc.nClusters} clinicians to match the
             current design.
           </p>
@@ -1567,10 +1623,10 @@ export default function PowerCurves() {
                 <div>
                   <span className="font-medium">Cluster-size variation:</span>
                 </div>
-                <div className="text-gray-500">
+                <div className="text-gray-600">
                   between-site {model.cvSite.toFixed(4)} (from roster)
                 </div>
-                <div className="text-gray-500">
+                <div className="text-gray-600">
                   within-site {clusterSizeCV.toFixed(2)} (assumed)
                 </div>
                 <div>
@@ -1609,7 +1665,7 @@ export default function PowerCurves() {
                           c === 0
                             ? "text-red-600 font-semibold"
                             : c === 1
-                              ? "text-orange-600 font-semibold"
+                              ? "text-orange-700 font-semibold"
                               : ""
                         }`}
                       >
@@ -1625,13 +1681,13 @@ export default function PowerCurves() {
                   {siteFeas.aggregate.map((c, g) => (
                     <td key={g} className="p-1.5 md:p-2">
                       {c}{" "}
-                      <span className="font-normal text-gray-500">
+                      <span className="font-normal text-gray-600">
                         ({((100 * c) / currentAlloc.nClusters).toFixed(1)}%)
                       </span>
                     </td>
                   ))}
                 </tr>
-                <tr className="text-gray-500 hover:bg-gray-50">
+                <tr className="text-gray-600 hover:bg-gray-50">
                   <td className="p-1.5 md:p-2">Nominal</td>
                   <td className="p-1.5 md:p-2">{currentAlloc.nClusters}</td>
                   {siteFeas.nominal.map((c, g) => (
@@ -1683,7 +1739,7 @@ export default function PowerCurves() {
           >
             <SectionHeading
               id="spillover"
-              className={spilloverOn ? "mb-1" : "mb-1 text-gray-500"}
+              className={spilloverOn ? "mb-1" : "mb-1 text-gray-600"}
               onCopy={copyAnchor}
               copied={copiedAnchor === "spillover"}
               info={
@@ -1701,24 +1757,26 @@ export default function PowerCurves() {
                   onChange={toggleSpillover}
                   className="h-4 w-4"
                 />
-                <span className={spilloverOn ? "font-medium" : "text-gray-500"}>
+                <span className={spilloverOn ? "font-medium" : "text-gray-600"}>
                   {spilloverOn ? "On" : "Off"}
                 </span>
               </label>
               <span
-                className="text-gray-500 hover:text-gray-700 cursor-help"
+                className="text-gray-600 hover:text-gray-700 cursor-help"
                 title={
                   "Off is the current design. Turning this on trades precision on the primary contrast for an estimate of how much a trained clinician's practice carries over to their patients who are not on the dashboard."
                 }
-                aria-label="About the spillover substudy"
               >
                 <InfoIcon />
+                <span className="sr-only">
+                  About the spillover substudy: off is the current design.
+                </span>
               </span>
               <button
                 onClick={() => setSpilloverOpen((v) => !v)}
                 aria-expanded={spilloverOpen}
                 aria-controls="spillover-details"
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+                className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-700"
               >
                 <ChevronIcon open={spilloverOpen} />
                 <span className="underline">
@@ -1859,7 +1917,7 @@ export default function PowerCurves() {
                               {r.P} / {r.M} / {r.K}
                             </td>
                             <td className="p-1.5 md:p-2">{fmt(r.primary)}</td>
-                            <td className="p-1.5 md:p-2 text-orange-600">
+                            <td className="p-1.5 md:p-2 text-orange-700">
                               {sh === 0 ? "—" : `+${cost}%`}
                             </td>
                             <td className="p-1.5 md:p-2">
@@ -1870,7 +1928,7 @@ export default function PowerCurves() {
                                 r.siteSummary.ok === 0
                                   ? "text-red-600"
                                   : r.siteSummary.single > 0
-                                    ? "text-orange-600"
+                                    ? "text-orange-700"
                                     : "text-teal-700"
                               }`}
                             >
@@ -1878,13 +1936,13 @@ export default function PowerCurves() {
                                 ? "—"
                                 : `${r.siteSummary.ok}/${r.siteSummary.ok + r.siteSummary.single + r.siteSummary.none}`}
                             </td>
-                            <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                            <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-600">
                               {fmt(r.spilloverB)}
                             </td>
-                            <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                            <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-600">
                               {fmt(r.spilloverC)}
                             </td>
-                            <td className="p-1.5 md:p-2 hidden lg:table-cell text-gray-500">
+                            <td className="p-1.5 md:p-2 hidden lg:table-cell text-gray-600">
                               {fmt(r.directEffect)}
                             </td>
                           </tr>
@@ -1893,7 +1951,7 @@ export default function PowerCurves() {
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-gray-600 mt-2">
                   Values are{" "}
                   {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"} in
                   HAM-D points, with Cohen&apos;s d in parentheses. The per-path
@@ -1907,7 +1965,7 @@ export default function PowerCurves() {
                   <h3 className="font-medium text-xs md:text-sm mb-1 flex items-center gap-1.5">
                     Practicality by site, at {currentSpill.M} mixed panels
                     <span
-                      className="text-gray-500 hover:text-gray-700 cursor-help font-normal"
+                      className="text-gray-600 hover:text-gray-700 cursor-help font-normal"
                       title={PRACTICALITY_NOTE}
                     >
                       <InfoIcon />
@@ -1945,7 +2003,7 @@ export default function PowerCurves() {
                                   : st.verdict === "ok"
                                     ? "font-medium text-teal-700"
                                     : st.verdict === "single"
-                                      ? "font-medium text-orange-600"
+                                      ? "font-medium text-orange-700"
                                       : "font-medium text-red-600"
                               }`}
                             >
@@ -1963,7 +2021,7 @@ export default function PowerCurves() {
                   <p
                     className={`text-xs mt-2 ${
                       !spilloverOn
-                        ? "text-gray-500"
+                        ? "text-gray-600"
                         : currentSpill.siteSummary.ok === 0
                           ? "text-red-700"
                           : currentSpill.siteSummary.single > 0
@@ -2022,8 +2080,11 @@ export default function PowerCurves() {
               />
             </div>
             <div>
-              <label className={labelCls}>Minimum N per group</label>
+              <label className={labelCls} htmlFor="s-difThresholdN">
+                Minimum N per group
+              </label>
               <select
+                id="s-difThresholdN"
                 value={difThresholdN}
                 onChange={(e) => set("difThresholdN")(parseInt(e.target.value))}
                 className={selectCls}
@@ -2080,47 +2141,47 @@ export default function PowerCurves() {
             <div
               className={`p-2 md:p-3 rounded ${currentDif.adequate ? "bg-teal-50" : "bg-red-50"}`}
             >
-              <div className="text-gray-500 text-xs">Smallest subgroup</div>
+              <div className="text-gray-600 text-xs">Smallest subgroup</div>
               <div
                 className={`text-lg md:text-xl font-bold ${currentDif.adequate ? "text-teal-700" : "text-red-700"}`}
               >
                 {currentDif.nFocal}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 of {currentDif.nUsers} AURORA users
               </div>
             </div>
             <div className="bg-gray-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">Comparison group</div>
+              <div className="text-gray-600 text-xs">Comparison group</div>
               <div className="text-lg md:text-xl font-bold text-gray-700">
                 {currentDif.nReference}
               </div>
-              <div className="text-gray-500 text-xs">remaining users</div>
+              <div className="text-gray-600 text-xs">remaining users</div>
             </div>
             <div className="bg-blue-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">DIF precision</div>
+              <div className="text-gray-600 text-xs">DIF precision</div>
               <div className="text-lg md:text-xl font-bold text-blue-700">
                 ±{currentDif.ciHalfWidth.toFixed(2)}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 logits ({ciLevel}% CI)
               </div>
             </div>
             <div className="bg-purple-50 p-2 md:p-3 rounded">
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 Smallest detectable DIF
               </div>
               <div className="text-lg md:text-xl font-bold text-purple-700">
                 {currentDif.mde.toFixed(2)}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 logits at {(power * 100).toFixed(0)}% power
               </div>
             </div>
             <div
               className={`p-2 md:p-3 rounded ${currentDif.power >= power ? "bg-green-50" : "bg-orange-50"}`}
             >
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 Power at {difTargetLogits} logits
               </div>
               <div
@@ -2128,7 +2189,7 @@ export default function PowerCurves() {
               >
                 {(currentDif.power * 100).toFixed(0)}%
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-gray-600 text-xs">
                 design effect {currentDif.designEffect.toFixed(2)}
               </div>
             </div>
@@ -2169,13 +2230,13 @@ export default function PowerCurves() {
             >
               Depression Severity (HAM-D)
             </SectionHeading>
-            <p className="text-xs text-gray-500 mb-1">
+            <p className="text-xs text-gray-600 mb-1">
               {showPrecision
                 ? `Precision: half-width of the ${ciLevel}% CI on the effect estimate`
                 : `Minimum detectable effect at ${(power * 100).toFixed(0)}% power`}
             </p>
             {(useRasch || useMFRM) && (
-              <p className="text-xs text-green-600 mb-2">
+              <p className="text-xs text-green-700 mb-2">
                 Measurement optimization: -
                 {currentHamd.varianceReduction?.toFixed(1)}% variance
               </p>
@@ -2382,12 +2443,12 @@ export default function PowerCurves() {
             >
               Study Retention
             </SectionHeading>
-            <p className="text-xs text-gray-500 mb-1">
+            <p className="text-xs text-gray-600 mb-1">
               {showPrecision
                 ? `Precision: half-width of the ${ciLevel}% CI`
                 : `Minimum detectable effect at ${(power * 100).toFixed(0)}% power`}
             </p>
-            <p className="text-xs text-gray-500 mb-2 md:mb-3">
+            <p className="text-xs text-gray-600 mb-2 md:mb-3">
               Survival analysis with {survivalEfficiency}× efficiency (binary
               MDE: {currentRetention.binaryMDE?.toFixed(1) || "N/A"} pp)
             </p>
@@ -2494,7 +2555,7 @@ export default function PowerCurves() {
             Intraclass Correlation Validation (arms{" "}
             {currentIcc.armKeys.join(" + ")})
           </SectionHeading>
-          <p className="text-xs text-gray-500 mb-2 md:mb-3">
+          <p className="text-xs text-gray-600 mb-2 md:mb-3">
             {ciLevel}% confidence interval precision for AURORA-clinician
             agreement (target: rule out intraclass correlation {"<"} {targetIcc}
             )
@@ -2590,7 +2651,7 @@ export default function PowerCurves() {
             High precision zone (±0.03-0.05) | Expected intraclass corr:{" "}
             {expectedIcc} |
             {currentIcc.canRuleOutPoor ? (
-              <span className="text-teal-600 font-medium ml-1">
+              <span className="text-teal-700 font-medium ml-1">
                 Can rule out intraclass corr {"<"} {targetIcc}
               </span>
             ) : (
@@ -2623,7 +2684,7 @@ export default function PowerCurves() {
                     <th
                       key={c.id}
                       className="text-left p-1.5 md:p-2"
-                      style={{ color: CONTRAST_COLORS[c.id] }}
+                      style={{ color: CONTRAST_TEXT_COLORS[c.id] }}
                     >
                       {showPrecision ? "HAM-D ±" : "HAM-D"}{" "}
                       {threeArm ? c.short : ""}
@@ -2717,7 +2778,7 @@ export default function PowerCurves() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-gray-600 mt-2">
             d is the HAM-D effect size (points / SD 7). h is Cohen&apos;s h, the
             equivalent for a difference between two proportions; d does not
             apply to retention because a proportion&apos;s variance depends on
@@ -2756,7 +2817,7 @@ export default function PowerCurves() {
               >
                 R Code for Verification
               </h2>
-              <span className="text-gray-500">{showRCode ? "−" : "+"}</span>
+              <span className="text-gray-600">{showRCode ? "−" : "+"}</span>
             </button>
             {/* Outside the toggle: nesting a button inside a button is invalid. */}
             <button
@@ -2765,8 +2826,8 @@ export default function PowerCurves() {
               aria-label="Copy a link to this section with the current settings"
               className={`opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-2 mr-2 rounded hover:bg-gray-100 ${
                 copiedAnchor === "r-code"
-                  ? "text-green-600 opacity-100"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "text-green-700 opacity-100"
+                  : "text-gray-600 hover:text-gray-700"
               }`}
             >
               {copiedAnchor === "r-code" ? <CheckIcon /> : <AnchorIcon />}
@@ -2782,7 +2843,7 @@ export default function PowerCurves() {
                   }
                   className={`px-4 py-2 text-sm font-medium rounded ${
                     webRStatus === "loading" || webRStatus === "running"
-                      ? "bg-gray-300 text-gray-500 cursor-wait"
+                      ? "bg-gray-300 text-gray-600 cursor-wait"
                       : "bg-blue-600 text-white hover:bg-blue-700"
                   }`}
                 >
@@ -2797,12 +2858,12 @@ export default function PowerCurves() {
                 {webRStatus === "loading" && (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-600">
                       ~25MB download
                     </span>
                   </div>
                 )}
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-600">
                   or copy the code below to run in R
                 </span>
               </div>
