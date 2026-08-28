@@ -1768,6 +1768,32 @@ section("7e. Spillover substudy (mixed panels)");
     );
   }
 
+  // The on/off toggle keeps mixedShare as the EFFECTIVE share, so links written before
+  // the toggle existed must be unaffected, and a link may pre-specify "off, but configured
+  // at X" via spilloverPreset.
+  {
+    const off = createModel({ ...defaults, designArms: 3, mixedShare: 0, spilloverPreset: 0.25 });
+    const on = createModel({ ...defaults, designArms: 3, mixedShare: 0.25, spilloverPreset: 0.25 });
+    ok(
+      "spilloverPreset does not affect the model while off",
+      !Number.isFinite(off.spillover(N, undefined).spilloverPooled.mde) &&
+        off.spillover(N).M === 0,
+      `M=${off.spillover(N).M}`,
+    );
+    // An old link carries mixedShare only; its numbers must not move.
+    const legacy = createModel({ ...defaults, designArms: 3, mixedShare: 0.25 });
+    close(
+      "a link predating the toggle is unchanged",
+      legacy.spillover(N).spilloverPooled.mde,
+      on.spillover(N).spilloverPooled.mde,
+      1e-12,
+    );
+    ok(
+      "the preset restores the same design when switched on",
+      on.spillover(N).M === createModel({ ...defaults, designArms: 3, mixedShare: off.spillover(N, 0.25) ? 0.25 : 0 }).spillover(N).M,
+    );
+  }
+
   // Off in two-arm mode.
   {
     const t2 = createModel({ ...defaults, designArms: 2, mixedShare: 0.2 });

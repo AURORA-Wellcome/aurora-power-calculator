@@ -178,6 +178,13 @@ So the dial changes only how patients are *arranged* across clinicians, never ho
 in each arm. The cost is that the clean primary contrast draws on fewer pure-ROM and
 no-ROM clinicians, which widens its interval; the panel reports that cost per row.
 
+The substudy has an on/off toggle. `mixedShare` remains the **effective** share (0 when
+off) so links written before the toggle existed keep their numbers exactly; the toggle
+moves the value between it and `spilloverPreset`, which is what the substudy returns to
+when switched back on. A link can therefore pre-specify "off, but configured at 25%", and
+switching off then on restores the value that was there rather than a default. The panel
+collapses when off, and expands when enabled or when a link targets `#spillover`.
+
 The panel reports practicality per site alongside the statistical trade-off, because the
 two pull in opposite directions on this roster: the settings that are affordable
 statistically are the ones that fail operationally. At a 10% mixed share every site gets

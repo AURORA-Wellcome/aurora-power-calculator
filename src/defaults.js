@@ -74,6 +74,10 @@ export const defaults = {
   // dashboard, some not). 0 disables it, which is the current design. Only meaningful in
   // the three-arm design. The overall arm allocation is invariant to this.
   mixedShare: 0,
+  // The share the on/off toggle restores. Kept separate from mixedShare (which stays the
+  // EFFECTIVE share, 0 when off) so switching the substudy off does not lose the setting,
+  // and so a link can pre-specify "configured at 0.2, currently off".
+  spilloverPreset: 0.2,
 
   // Fairness / DIF substudy (Aim 2: "fair"). Only AURORA users generate item responses.
   // Share of the sample in the SMALLEST subgroup on the fairness dimension being tested

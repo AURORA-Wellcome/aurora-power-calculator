@@ -176,6 +176,7 @@ export default function PowerCurves() {
     difItemInfo,
     randomization,
     mixedShare,
+    spilloverPreset,
     siteRoster,
   } = settings;
 
@@ -200,6 +201,29 @@ export default function PowerCurves() {
     // Keep the address bar in step so the current view is always linkable.
     syncLocation(settings);
   }, [settings]);
+
+  // Spillover substudy on/off. mixedShare stays the EFFECTIVE share so every existing
+  // link keeps its numbers; the toggle moves the value between it and spilloverPreset,
+  // which means switching off and on again restores what was there rather than a default.
+  const spilloverOn = mixedShare > 0;
+  const toggleSpillover = () => {
+    // Switching the substudy on reveals it: you have just asked for something the panel
+    // is there to show. Switching off leaves the details as they were, so a reader who
+    // deliberately opened them keeps them open.
+    if (!spilloverOn) setSpilloverOpen(true);
+    setSettings((prev) =>
+      prev.mixedShare > 0
+        ? { ...prev, spilloverPreset: prev.mixedShare, mixedShare: 0 }
+        : { ...prev, mixedShare: prev.spilloverPreset || 0.2 },
+    );
+  };
+  // Collapsed when off, since an off substudy is just noise on the page. Expanded anyway
+  // if a link points here, because that reader came to look at it.
+  const [spilloverOpen, setSpilloverOpen] = useState(
+    () =>
+      mixedShare > 0 ||
+      (typeof window !== "undefined" && window.location.hash === "#spillover"),
+  );
 
   const [copiedAnchor, setCopiedAnchor] = useState(null);
   const copyAnchor = async (id) => {
@@ -1503,226 +1527,279 @@ export default function PowerCurves() {
           >
             Spillover Substudy (mixed panels)
           </SectionHeading>
-          <p className="text-xs text-gray-500 mb-3">
-            A third clinician type: ROM-trained with the dashboard, but only
-            some of their patients on it. Comparing the same arm across
-            clinician types isolates spillover of the clinician&apos;s training
-            onto patients who are not on the dashboard. The overall arm
-            allocation is unchanged at every setting; only the arrangement of
-            patients across clinicians changes.
-          </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3">
-            <div>
-              <label className={labelCls}>
-                Mixed panels: {currentSpill.M} of {currentAlloc.nClusters}{" "}
-                clinicians
-              </label>
+          <div className="flex flex-wrap items-center gap-3 mb-1">
+            <label className="flex items-center gap-2 text-xs md:text-sm cursor-pointer">
               <input
-                type="range"
-                min="0"
-                max="0.35"
-                step="0.05"
-                value={mixedShare}
-                onChange={(e) => set("mixedShare")(parseFloat(e.target.value))}
-                className="w-full"
+                type="checkbox"
+                checked={spilloverOn}
+                onChange={toggleSpillover}
+                className="h-4 w-4"
               />
-              <div className="text-xs text-gray-400">
-                0 = current design, no spillover estimate
-              </div>
-            </div>
-            <div className="text-xs text-gray-600 col-span-3 flex items-center">
-              <div>
-                <div>
-                  <span className="font-medium">Clinician split:</span>{" "}
-                  {currentSpill.P} pure-ROM / {currentSpill.M} mixed /{" "}
-                  {currentSpill.K} no-ROM
-                </div>
-                <div>
-                  <span className="font-medium">Mixed panel:</span>{" "}
-                  {currentSpill.panelMixed
-                    .map(
-                      (x, i) =>
-                        `${Math.round(x * 10) / 10} ${model.arms[i].short}`,
-                    )
-                    .join(" / ")}
-                  {"  ·  "}
-                  <span className="font-medium">No-ROM panel:</span>{" "}
-                  {currentSpill.panelNoRom
-                    .map(
-                      (x, i) =>
-                        `${Math.round(x * 10) / 10} ${model.arms[i + 1].short}`,
-                    )
-                    .join(" / ")}
-                </div>
-                <div className="text-gray-400">
-                  Patients per arm: {currentSpill.patients.join(" / ")}{" "}
-                  (unchanged by this setting)
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
-            <table className="w-full text-xs md:text-sm min-w-[640px] tabular-nums">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-1.5 md:p-2">Mixed</th>
-                  <th className="text-left p-1.5 md:p-2">
-                    pure / mixed / no-ROM
-                  </th>
-                  <th className="text-left p-1.5 md:p-2">A vs C (clean)</th>
-                  <th className="text-left p-1.5 md:p-2">vs M=0</th>
-                  <th className="text-left p-1.5 md:p-2">Spillover pooled</th>
-                  <th className="text-left p-1.5 md:p-2">Sites usable</th>
-                  <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
-                    onto B
-                  </th>
-                  <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
-                    onto C
-                  </th>
-                  <th className="text-left p-1.5 md:p-2 hidden lg:table-cell">
-                    Direct A effect
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {SPILL_SHARES.map((sh) => {
-                  const r = model.spillover(currentN, sh);
-                  const key = showPrecision ? "ciHalfWidth" : "mde";
-                  const dkey = showPrecision ? "ciEffectSize" : "effectSize";
-                  const fmt = (o2) =>
-                    Number.isFinite(o2[key])
-                      ? `${o2[key].toFixed(2)} (${o2[dkey].toFixed(2)})`
-                      : "—";
-                  const cost = (
-                    (r.primary[key] / spillBase[key] - 1) *
-                    100
-                  ).toFixed(0);
-                  return (
-                    <tr
-                      key={sh}
-                      className={`border-b ${sh === mixedShare ? "bg-blue-50 font-semibold" : ""}`}
-                    >
-                      <td className="p-1.5 md:p-2">{r.M}</td>
-                      <td className="p-1.5 md:p-2">
-                        {r.P} / {r.M} / {r.K}
-                      </td>
-                      <td className="p-1.5 md:p-2">{fmt(r.primary)}</td>
-                      <td className="p-1.5 md:p-2 text-orange-600">
-                        {sh === 0 ? "—" : `+${cost}%`}
-                      </td>
-                      <td className="p-1.5 md:p-2">{fmt(r.spilloverPooled)}</td>
-                      <td
-                        className={`p-1.5 md:p-2 ${
-                          r.siteSummary.ok === 0
-                            ? "text-red-600"
-                            : r.siteSummary.single > 0
-                              ? "text-orange-600"
-                              : "text-teal-700"
-                        }`}
-                      >
-                        {sh === 0
-                          ? "—"
-                          : `${r.siteSummary.ok}/${r.siteSummary.ok + r.siteSummary.single + r.siteSummary.none}`}
-                      </td>
-                      <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
-                        {fmt(r.spilloverB)}
-                      </td>
-                      <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
-                        {fmt(r.spilloverC)}
-                      </td>
-                      <td className="p-1.5 md:p-2 hidden lg:table-cell text-gray-500">
-                        {fmt(r.directEffect)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-3 pt-3 border-t">
-            <h3 className="font-medium text-xs md:text-sm mb-1">
-              Practicality by site, at {currentSpill.M} mixed panels
-            </h3>
-            <p className="text-xs text-gray-500 mb-2">
-              The spillover comparison is between clinicians, so a site with a
-              single mixed clinician has its whole contribution confounded with
-              that one person&apos;s practice, and contributes nothing usable.
-              Sites are listed smallest last, because that is where the design
-              fails first.
-            </p>
-            <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
-              <table className="w-full text-xs md:text-sm min-w-[520px] tabular-nums">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-1.5 md:p-2">Site</th>
-                    <th className="text-left p-1.5 md:p-2">Clinicians</th>
-                    <th className="text-left p-1.5 md:p-2">Mixed panels</th>
-                    <th className="text-left p-1.5 md:p-2">
-                      Completers per spillover cell
-                    </th>
-                    <th className="text-left p-1.5 md:p-2">Usable?</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentSpill.siteDetail.map((st, i) => (
-                    <tr key={i} className="border-b">
-                      <td className="p-1.5 md:p-2">{st.name}</td>
-                      <td className="p-1.5 md:p-2">{st.clinicians}</td>
-                      <td className="p-1.5 md:p-2">{st.mixed}</td>
-                      <td className="p-1.5 md:p-2">
-                        {st.cellCompleters.toFixed(1)}
-                      </td>
-                      <td
-                        className={`p-1.5 md:p-2 font-medium ${
-                          st.verdict === "ok"
-                            ? "text-teal-700"
-                            : st.verdict === "single"
-                              ? "text-orange-600"
-                              : "text-red-600"
-                        }`}
-                      >
-                        {st.verdict === "ok"
-                          ? "yes"
-                          : st.verdict === "single"
-                            ? "one clinician only"
-                            : "no mixed panel"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p
-              className={`text-xs mt-2 ${
-                currentSpill.siteSummary.ok === 0
-                  ? "text-red-700"
-                  : currentSpill.siteSummary.single > 0
-                    ? "text-orange-700"
-                    : "text-teal-700"
-              }`}
+              <span className={spilloverOn ? "font-medium" : "text-gray-500"}>
+                {spilloverOn
+                  ? `On - ${currentSpill.M} of ${currentAlloc.nClusters} clinicians run mixed panels`
+                  : `Off - no mixed panels (would use ${Math.round(spilloverPreset * 100)}%)`}
+              </span>
+            </label>
+            <button
+              onClick={() => setSpilloverOpen((v) => !v)}
+              className="text-xs text-gray-500 hover:text-gray-700 underline"
             >
-              {currentSpill.siteSummary.ok} of {currentSpill.siteDetail.length}{" "}
-              sites can run more than one mixed panel.{" "}
-              {currentSpill.siteSummary.single > 0 &&
-                `${currentSpill.siteSummary.single} contribute a single clinician each, so their share of the comparison is confounded. `}
-              That leaves{" "}
-              {currentSpill.siteSummary.usableCellCompleters.toFixed(0)} of{" "}
-              {currentSpill.siteSummary.totalCellCompleters.toFixed(0)}{" "}
-              completers per spillover cell in sites where the estimate is
-              interpretable.
-            </p>
+              {spilloverOpen ? "hide details" : "show details"}
+            </button>
           </div>
 
-          <p className="text-xs text-gray-500 mt-2">
-            Values are {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"}{" "}
-            in HAM-D points, with Cohen&apos;s d in parentheses. The per-path
-            estimates (onto B, onto C) are much weaker than the pooled one;
-            treat them as descriptive and pre-specify the pooled test. Spillover
-            should attenuate the treatment effect, so an estimate with the
-            opposite sign is noise rather than a finding.
-          </p>
+          {!spilloverOn && (
+            <p className="text-xs text-gray-500">
+              Off is the current design. Turning this on trades precision on the
+              primary contrast for an estimate of how much a trained
+              clinician&apos;s practice carries over to their patients who are
+              not on the dashboard.
+            </p>
+          )}
+
+          {spilloverOpen && (
+            <>
+              <p className="text-xs text-gray-500 mb-3 mt-2">
+                A third clinician type: ROM-trained with the dashboard, but only
+                some of their patients on it. Comparing the same arm across
+                clinician types isolates spillover of the clinician&apos;s
+                training onto patients who are not on the dashboard. The overall
+                arm allocation is unchanged at every setting; only the
+                arrangement of patients across clinicians changes.
+              </p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-3">
+                <div>
+                  <label className={labelCls}>
+                    Mixed panels: {currentSpill.M} of {currentAlloc.nClusters}{" "}
+                    clinicians
+                  </label>
+                  <input
+                    type="range"
+                    min="0.05"
+                    max="0.35"
+                    step="0.05"
+                    value={mixedShare || spilloverPreset}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      // Keep the two in step so the toggle always restores the last value used.
+                      setSettings((prev) => ({
+                        ...prev,
+                        mixedShare: v,
+                        spilloverPreset: v,
+                      }));
+                    }}
+                    className="w-full"
+                    disabled={!spilloverOn}
+                  />
+                  <div className="text-xs text-gray-400">
+                    Use the checkbox above to switch the substudy off entirely
+                  </div>
+                </div>
+                <div className="text-xs text-gray-600 col-span-3 flex items-center">
+                  <div>
+                    <div>
+                      <span className="font-medium">Clinician split:</span>{" "}
+                      {currentSpill.P} pure-ROM / {currentSpill.M} mixed /{" "}
+                      {currentSpill.K} no-ROM
+                    </div>
+                    <div>
+                      <span className="font-medium">Mixed panel:</span>{" "}
+                      {currentSpill.panelMixed
+                        .map(
+                          (x, i) =>
+                            `${Math.round(x * 10) / 10} ${model.arms[i].short}`,
+                        )
+                        .join(" / ")}
+                      {"  ·  "}
+                      <span className="font-medium">No-ROM panel:</span>{" "}
+                      {currentSpill.panelNoRom
+                        .map(
+                          (x, i) =>
+                            `${Math.round(x * 10) / 10} ${model.arms[i + 1].short}`,
+                        )
+                        .join(" / ")}
+                    </div>
+                    <div className="text-gray-400">
+                      Patients per arm: {currentSpill.patients.join(" / ")}{" "}
+                      (unchanged by this setting)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+                <table className="w-full text-xs md:text-sm min-w-[640px] tabular-nums">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-1.5 md:p-2">Mixed</th>
+                      <th className="text-left p-1.5 md:p-2">
+                        pure / mixed / no-ROM
+                      </th>
+                      <th className="text-left p-1.5 md:p-2">A vs C (clean)</th>
+                      <th className="text-left p-1.5 md:p-2">vs M=0</th>
+                      <th className="text-left p-1.5 md:p-2">
+                        Spillover pooled
+                      </th>
+                      <th className="text-left p-1.5 md:p-2">Sites usable</th>
+                      <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
+                        onto B
+                      </th>
+                      <th className="text-left p-1.5 md:p-2 hidden md:table-cell">
+                        onto C
+                      </th>
+                      <th className="text-left p-1.5 md:p-2 hidden lg:table-cell">
+                        Direct A effect
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {SPILL_SHARES.map((sh) => {
+                      const r = model.spillover(currentN, sh);
+                      const key = showPrecision ? "ciHalfWidth" : "mde";
+                      const dkey = showPrecision
+                        ? "ciEffectSize"
+                        : "effectSize";
+                      const fmt = (o2) =>
+                        Number.isFinite(o2[key])
+                          ? `${o2[key].toFixed(2)} (${o2[dkey].toFixed(2)})`
+                          : "—";
+                      const cost = (
+                        (r.primary[key] / spillBase[key] - 1) *
+                        100
+                      ).toFixed(0);
+                      return (
+                        <tr
+                          key={sh}
+                          className={`border-b ${sh === mixedShare ? "bg-blue-50 font-semibold" : ""}`}
+                        >
+                          <td className="p-1.5 md:p-2">{r.M}</td>
+                          <td className="p-1.5 md:p-2">
+                            {r.P} / {r.M} / {r.K}
+                          </td>
+                          <td className="p-1.5 md:p-2">{fmt(r.primary)}</td>
+                          <td className="p-1.5 md:p-2 text-orange-600">
+                            {sh === 0 ? "—" : `+${cost}%`}
+                          </td>
+                          <td className="p-1.5 md:p-2">
+                            {fmt(r.spilloverPooled)}
+                          </td>
+                          <td
+                            className={`p-1.5 md:p-2 ${
+                              r.siteSummary.ok === 0
+                                ? "text-red-600"
+                                : r.siteSummary.single > 0
+                                  ? "text-orange-600"
+                                  : "text-teal-700"
+                            }`}
+                          >
+                            {sh === 0
+                              ? "—"
+                              : `${r.siteSummary.ok}/${r.siteSummary.ok + r.siteSummary.single + r.siteSummary.none}`}
+                          </td>
+                          <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                            {fmt(r.spilloverB)}
+                          </td>
+                          <td className="p-1.5 md:p-2 hidden md:table-cell text-gray-500">
+                            {fmt(r.spilloverC)}
+                          </td>
+                          <td className="p-1.5 md:p-2 hidden lg:table-cell text-gray-500">
+                            {fmt(r.directEffect)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 pt-3 border-t">
+                <h3 className="font-medium text-xs md:text-sm mb-1">
+                  Practicality by site, at {currentSpill.M} mixed panels
+                </h3>
+                <p className="text-xs text-gray-500 mb-2">
+                  The spillover comparison is between clinicians, so a site with
+                  a single mixed clinician has its whole contribution confounded
+                  with that one person&apos;s practice, and contributes nothing
+                  usable. Sites are listed smallest last, because that is where
+                  the design fails first.
+                </p>
+                <div className="overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+                  <table className="w-full text-xs md:text-sm min-w-[520px] tabular-nums">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-1.5 md:p-2">Site</th>
+                        <th className="text-left p-1.5 md:p-2">Clinicians</th>
+                        <th className="text-left p-1.5 md:p-2">Mixed panels</th>
+                        <th className="text-left p-1.5 md:p-2">
+                          Completers per spillover cell
+                        </th>
+                        <th className="text-left p-1.5 md:p-2">Usable?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentSpill.siteDetail.map((st, i) => (
+                        <tr key={i} className="border-b">
+                          <td className="p-1.5 md:p-2">{st.name}</td>
+                          <td className="p-1.5 md:p-2">{st.clinicians}</td>
+                          <td className="p-1.5 md:p-2">{st.mixed}</td>
+                          <td className="p-1.5 md:p-2">
+                            {st.cellCompleters.toFixed(1)}
+                          </td>
+                          <td
+                            className={`p-1.5 md:p-2 font-medium ${
+                              st.verdict === "ok"
+                                ? "text-teal-700"
+                                : st.verdict === "single"
+                                  ? "text-orange-600"
+                                  : "text-red-600"
+                            }`}
+                          >
+                            {st.verdict === "ok"
+                              ? "yes"
+                              : st.verdict === "single"
+                                ? "one clinician only"
+                                : "no mixed panel"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p
+                  className={`text-xs mt-2 ${
+                    currentSpill.siteSummary.ok === 0
+                      ? "text-red-700"
+                      : currentSpill.siteSummary.single > 0
+                        ? "text-orange-700"
+                        : "text-teal-700"
+                  }`}
+                >
+                  {currentSpill.siteSummary.ok} of{" "}
+                  {currentSpill.siteDetail.length} sites can run more than one
+                  mixed panel.{" "}
+                  {currentSpill.siteSummary.single > 0 &&
+                    `${currentSpill.siteSummary.single} contribute a single clinician each, so their share of the comparison is confounded. `}
+                  That leaves{" "}
+                  {currentSpill.siteSummary.usableCellCompleters.toFixed(0)} of{" "}
+                  {currentSpill.siteSummary.totalCellCompleters.toFixed(0)}{" "}
+                  completers per spillover cell in sites where the estimate is
+                  interpretable.
+                </p>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-2">
+                Values are{" "}
+                {showPrecision ? `${ciLevel}% CI half-widths` : "MDEs"} in HAM-D
+                points, with Cohen&apos;s d in parentheses. The per-path
+                estimates (onto B, onto C) are much weaker than the pooled one;
+                treat them as descriptive and pre-specify the pooled test.
+                Spillover should attenuate the treatment effect, so an estimate
+                with the opposite sign is noise rather than a finding.
+              </p>
+            </>
+          )}
         </div>
       )}
 

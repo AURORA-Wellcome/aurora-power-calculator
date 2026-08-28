@@ -80,6 +80,7 @@ export const SETTING_SPEC = {
   // enforces what a regex cannot: every site needs at least as many patients as
   // clinicians.
   siteRoster: { type: "string", maxLength: 400, validate: parseRoster },
+  spilloverPreset: { type: "number", min: 0.01, max: 0.6 },
 };
 
 // APPEND-ONLY. Adding a setting means pushing it onto the end; older (shorter) tokens
