@@ -901,7 +901,12 @@ section("7g. ICC substudy confidence level");
 
   // The label and the number come from one value, so they cannot drift apart.
   const d = createModel(base).icc(N);
-  close("crit is consistent with the half-width", d.ciHalfWidth / d.seIcc, d.crit, 1e-12);
+  close(
+    "crit is consistent with the half-width",
+    d.ciHalfWidth / d.seIcc,
+    d.crit,
+    1e-12,
+  );
 
   // Without the t correction the critical value is exactly the two-sided normal quantile.
   const noT = createModel({ ...base, smallSampleT: false }).icc(N);
@@ -914,9 +919,22 @@ section("7g. ICC substudy confidence level");
 
   // With it on (the shipped default) it is the t at the same tail, so slightly wider.
   const df = Math.round(N / defaults.patientsPerCluster) - 2;
-  close("t on: crit is t at the same tail", d.crit, tQuantile(0.975, df), 1e-12);
-  ok("t correction widens the interval", d.crit > noT.crit, `${d.crit.toFixed(4)} > ${noT.crit.toFixed(4)}`);
-  ok("crit is labelled with its df", d.critMethod === `unadjusted, t(${df})`, d.critMethod);
+  close(
+    "t on: crit is t at the same tail",
+    d.crit,
+    tQuantile(0.975, df),
+    1e-12,
+  );
+  ok(
+    "t correction widens the interval",
+    d.crit > noT.crit,
+    `${d.crit.toFixed(4)} > ${noT.crit.toFixed(4)}`,
+  );
+  ok(
+    "crit is labelled with its df",
+    d.critMethod === `unadjusted, t(${df})`,
+    d.critMethod,
+  );
 
   // The whole point: alpha moves the interval, and moves it by exactly the quantile ratio.
   const a01 = createModel({ ...base, smallSampleT: false, alpha: 0.01 }).icc(N);
@@ -936,11 +954,13 @@ section("7g. ICC substudy confidence level");
   // No arm-level multiplicity may leak in: three arms, confirmatory, every rule.
   const three = { ...base, designArms: 3, analysisFraming: "confirmatory" };
   const widths = ["dunnett", "bonferroni", "none"].map(
-    (multiplicity) => createModel({ ...three, multiplicity }).icc(N).ciHalfWidth,
+    (multiplicity) =>
+      createModel({ ...three, multiplicity }).icc(N).ciHalfWidth,
   );
   ok(
     "multiplicity rule does not touch the ICC interval",
-    Math.abs(widths[0] - widths[1]) < 1e-12 && Math.abs(widths[1] - widths[2]) < 1e-12,
+    Math.abs(widths[0] - widths[1]) < 1e-12 &&
+      Math.abs(widths[1] - widths[2]) < 1e-12,
     widths.map((w) => w.toFixed(6)).join(" / "),
   );
 }
@@ -1790,7 +1810,9 @@ section("7e. Spillover substudy (mixed panels)");
   // ones, which is the whole point of surfacing this, so pin the shape of that tension.
   {
     const bySite = (share) => m.spillover(N, share).siteSummary;
-    const s10 = bySite(0.1), s20 = bySite(0.2), s30 = bySite(0.3);
+    const s10 = bySite(0.1),
+      s20 = bySite(0.2),
+      s30 = bySite(0.3);
     ok(
       "at a low mixed share every site is a singleton",
       s10.ok === 0 && s10.single === 11,
@@ -1816,7 +1838,10 @@ section("7e. Spillover substudy (mixed panels)");
     ok(
       "per-site P/M/K exhausts each site",
       d.every((x) => x.pure + x.mixed + x.noRom === x.clinicians),
-      d.map((x) => `${x.pure}+${x.mixed}+${x.noRom}=${x.clinicians}`).slice(0, 3).join(" "),
+      d
+        .map((x) => `${x.pure}+${x.mixed}+${x.noRom}=${x.clinicians}`)
+        .slice(0, 3)
+        .join(" "),
     );
     ok(
       "site verdicts follow the mixed count",
@@ -1840,8 +1865,18 @@ section("7e. Spillover substudy (mixed panels)");
   // the toggle existed must be unaffected, and a link may pre-specify "off, but configured
   // at X" via spilloverPreset.
   {
-    const off = createModel({ ...defaults, designArms: 3, mixedShare: 0, spilloverPreset: 0.25 });
-    const on = createModel({ ...defaults, designArms: 3, mixedShare: 0.25, spilloverPreset: 0.25 });
+    const off = createModel({
+      ...defaults,
+      designArms: 3,
+      mixedShare: 0,
+      spilloverPreset: 0.25,
+    });
+    const on = createModel({
+      ...defaults,
+      designArms: 3,
+      mixedShare: 0.25,
+      spilloverPreset: 0.25,
+    });
     ok(
       "spilloverPreset does not affect the model while off",
       !Number.isFinite(off.spillover(N, undefined).spilloverPooled.mde) &&
@@ -1849,7 +1884,11 @@ section("7e. Spillover substudy (mixed panels)");
       `M=${off.spillover(N).M}`,
     );
     // An old link carries mixedShare only; its numbers must not move.
-    const legacy = createModel({ ...defaults, designArms: 3, mixedShare: 0.25 });
+    const legacy = createModel({
+      ...defaults,
+      designArms: 3,
+      mixedShare: 0.25,
+    });
     close(
       "a link predating the toggle is unchanged",
       legacy.spillover(N).spilloverPooled.mde,
@@ -1858,7 +1897,12 @@ section("7e. Spillover substudy (mixed panels)");
     );
     ok(
       "the preset restores the same design when switched on",
-      on.spillover(N).M === createModel({ ...defaults, designArms: 3, mixedShare: off.spillover(N, 0.25) ? 0.25 : 0 }).spillover(N).M,
+      on.spillover(N).M ===
+        createModel({
+          ...defaults,
+          designArms: 3,
+          mixedShare: off.spillover(N, 0.25) ? 0.25 : 0,
+        }).spillover(N).M,
     );
   }
 
