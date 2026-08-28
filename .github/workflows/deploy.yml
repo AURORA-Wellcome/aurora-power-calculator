@@ -25,11 +25,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          # 24 is the active LTS (maintenance from 2026-10, EOL 2028-04). 22 went
-          # security-only in 2025-10 and 20 is already EOL, which is what the runner
-          # deprecation notice was about. Pinned to a major rather than left bare so it
-          # cannot drift below Vite's ^20.19 || >=22.12 floor.
-          node-version: "24"
+          # Read from .node-version so CI and local development cannot drift apart.
+          # nvm, fnm, nodenv and mise all read the same file. It pins a major rather
+          # than an exact patch, so security patches arrive without a commit, but it
+          # cannot fall below Vite's ^20.19 || >=22.12 floor the way a bare "20" could.
+          node-version-file: ".node-version"
           cache: npm
 
       # ci, not install: honours package-lock.json, so a deploy builds the same tree

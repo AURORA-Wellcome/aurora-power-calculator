@@ -1,0 +1,6 @@
+# mise ignores .node-version unless idiomatic version files are enabled per tool. Enabling
+# it here, rather than writing the version into this file, keeps .node-version the single
+# source of truth: the workflow reads that same file via setup-node's node-version-file,
+# and nvm, fnm and nodenv read it natively with no config at all.
+[settings]
+idiomatic_version_file_enable_tools = ["node"]

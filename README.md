@@ -40,7 +40,11 @@ Interactive web application for exploring the precision and minimum detectable e
 
 ### Prerequisites
 
-- Node.js (v18 or higher recommended)
+- Node.js 24, pinned in `.node-version`. nvm, fnm and nodenv read that file
+  natively (`nvm use`); mise needs `mise trust` once in this directory, which the
+  committed `mise.toml` then wires up. CI reads the same file, so local and deploy
+  builds cannot drift apart.
+- R, only for `scripts/crosscheck-r.mjs`. Everything else runs without it.
 
 ### Installation
 
