@@ -1446,7 +1446,7 @@ export default function PowerCurves() {
             </thead>
             <tbody>
               {currentAlloc.siteRoster.map((site, i) => (
-                <tr key={i} className="border-b">
+                <tr key={i} className="border-b hover:bg-gray-50">
                   <td className="p-1.5 md:p-2">{site.name}</td>
                   <td className="p-1.5 md:p-2">{site.clinicians}</td>
                   {siteFeas.perSite[i].map((c, g) => (
@@ -1466,7 +1466,7 @@ export default function PowerCurves() {
                   ))}
                 </tr>
               ))}
-              <tr className="font-semibold bg-gray-50">
+              <tr className="font-semibold bg-gray-50 hover:bg-gray-100">
                 <td className="p-1.5 md:p-2">Realized</td>
                 <td className="p-1.5 md:p-2">{currentAlloc.nClusters}</td>
                 {siteFeas.aggregate.map((c, g) => (
@@ -1478,7 +1478,7 @@ export default function PowerCurves() {
                   </td>
                 ))}
               </tr>
-              <tr className="text-gray-500">
+              <tr className="text-gray-500 hover:bg-gray-50">
                 <td className="p-1.5 md:p-2">Nominal</td>
                 <td className="p-1.5 md:p-2">{currentAlloc.nClusters}</td>
                 {siteFeas.nominal.map((c, g) => (
@@ -1681,7 +1681,7 @@ export default function PowerCurves() {
                       return (
                         <tr
                           key={sh}
-                          className={`border-b ${sh === mixedShare ? "bg-blue-50 font-semibold" : ""}`}
+                          className={`border-b ${sh === mixedShare ? "bg-blue-50 font-semibold hover:bg-blue-100" : "hover:bg-gray-50"}`}
                         >
                           <td className="p-1.5 md:p-2">{r.M}</td>
                           <td className="p-1.5 md:p-2">
@@ -1748,7 +1748,7 @@ export default function PowerCurves() {
                     </thead>
                     <tbody>
                       {currentSpill.siteDetail.map((st, i) => (
-                        <tr key={i} className="border-b">
+                        <tr key={i} className="border-b hover:bg-gray-50">
                           <td className="p-1.5 md:p-2">{st.name}</td>
                           <td className="p-1.5 md:p-2">{st.clinicians}</td>
                           <td className="p-1.5 md:p-2">{st.mixed}</td>
@@ -2422,7 +2422,7 @@ export default function PowerCurves() {
                 return (
                   <tr
                     key={n}
-                    className={`border-b ${isCurrentDesign ? "bg-blue-50 font-semibold" : ""}`}
+                    className={`border-b ${isCurrentDesign ? "bg-blue-50 font-semibold hover:bg-blue-100" : "hover:bg-gray-50"}`}
                   >
                     <td className="p-1.5 md:p-2">{n}</td>
                     <td className="p-1.5 md:p-2 hidden sm:table-cell">
