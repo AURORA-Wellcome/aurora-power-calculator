@@ -20,6 +20,7 @@
 
 import { defaults } from "./defaults.js";
 import { parseRoster } from "./sites.js";
+import { TRIGGER_THRESHOLDS } from "./responsiveness.js";
 
 export const TOKEN_PARAM = "c";
 const VERSION = "1";
@@ -81,6 +82,13 @@ export const SETTING_SPEC = {
   // clinicians.
   siteRoster: { type: "string", maxLength: 400, validate: parseRoster },
   spilloverPreset: { type: "number", min: 0.01, max: 0.6 },
+  // Responsiveness interviews (Aim 2.2). The threshold is restricted to the values the
+  // simulation presets cover, so an edited link cannot ask for one that has no preset.
+  respAudits: { type: "int", min: 0, max: 6 },
+  respTrigger: { type: "enum", values: TRIGGER_THRESHOLDS },
+  respScoring: { type: "enum", values: ["single", "consensus"] },
+  respCompletion: { type: "number", min: 0.3, max: 1 },
+  respEnrollWeeks: { type: "int", min: 8, max: 80 },
 };
 
 // APPEND-ONLY. Adding a setting means pushing it onto the end; older (shorter) tokens

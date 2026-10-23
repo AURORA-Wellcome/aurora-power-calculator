@@ -14,6 +14,7 @@ Interactive web application for exploring the precision and minimum detectable e
 - **Retention Analysis**: study retention modelled with survival analysis efficiency gains.
 - **Intraclass Correlation Validation**: precision for AURORA-clinician agreement. In three-arm mode both AURORA-using arms contribute rating pairs.
 - **Measurement fairness (DIF)**: subgroup sizes among AURORA users against a per-group adequacy minimum, plus the precision and detectable magnitude of a differential-item-functioning estimate in logits. Covers the "fair" half of the measurement aim, which is usually constrained by subgroup size rather than total N.
+- **Responsiveness interviews (Aim 2.2)**: the extra HAM-Ds held when the AURORA algorithm reports a change (triggered, for PPV) and at random (audits, for the miss rate). Reports interviews per participant, precision of the miss rate and PPV, peak weekly load and cost by site, and the fit against the application's assessment budget. How the algorithm behaves at each threshold comes from simulation presets (see below).
 - **Hybrid cluster-individual randomization**: clinicians randomized to ROM vs no-ROM, then patients within no-ROM clinicians individually randomized to app-only vs TAU. That makes app-only vs TAU a within-clinician contrast, removing the between-clinician variance from it.
 - **Allocation presets** matching the study design memo: `B.1` 33/33/33, `B.2` 50/25/25, `B.3` 40/30/30. Under hybrid, B.3 is the recommendation: it ties the balanced 45/27.5/27.5 allocation on the binding A-vs-C contrast (1.396 vs 1.395 at 110 clinicians) and beats it on B-vs-C and on the pooled contrast, because equalising the contrasts means giving back the free advantage hybrid hands to B-vs-C.
 - **Power for an assumed effect**: alongside the MDE, a direct power readout for a specified HAM-D difference.
@@ -29,6 +30,9 @@ Interactive web application for exploring the precision and minimum detectable e
 | `src/calc.js` | All statistics: quantiles, Dunnett critical values, cluster apportionment, the three outcome calculators. No React, so it can be exercised directly from Node. |
 | `src/rcode.js` | Generates the R verification script (single source for both the displayed code and the WebR run). |
 | `src/defaults.js` | Shipped default settings, importable without React so the checks can pin them. |
+| `src/responsiveness.js` | Inputs for the Aim 2.2 panel: the simulation presets, the follow-up schedule, and interview time. |
+| `src/budget.js`, `src/budget.example.js` | Budget figures for the Aim 2.2 costs: public placeholders, or the gitignored `src/budget.local.js` when present (see "Budget figures"). |
+| `simulations/` | Python simulations behind the Aim 2.2 presets, with their saved output. Not part of the build. |
 | `src/urlState.js` | Reversible URL token codec for the full configuration, with validation of untrusted input. |
 | `src/App.jsx` | UI and charts. |
 | `scripts/verify.mjs` | Checks for `src/calc.js`, described below. |
@@ -233,6 +237,100 @@ attenuate the treatment effect, so an estimate of the opposite sign is noise; an
 panel needs the full patients-per-clinician target to preserve its three-way split, which
 makes the design fragile to under-recruitment and hard to run at sites with few clinicians.
 
+## Responsiveness interviews (Aim 2.2)
+
+Aim 2.2 promises PPV, sensitivity and specificity for AURORA-detected severity shifts,
+from clinician ratings "obtained within 24 hours, as well as at random". That takes two
+kinds of extra HAM-D, both only in the arms that use AURORA, since the algorithm does not
+run in TAU:
+
+- **Triggered interviews**, when the algorithm's estimate has moved by the threshold since
+  the last HAM-D, at most one per four-week interval. They estimate PPV, defined as a
+  change of 3 or more points in the flagged direction.
+- **Random audits**, scheduled at randomization, one in each of k equal strata of days
+  7–111 and never within 3 days of a scheduled HAM-D. They estimate the miss rate: the
+  share of audits the algorithm scores negative that hold a real change.
+
+The panel splits the work the same way the rest of the calculator does. **Computed here, in
+closed form and mirrored in the R script:**
+
+- requests and completions per app user;
+- precision of the miss rate (overall and in the smallest fairness subgroup) and of PPV;
+- peak weekly interviews and rater hours per site;
+- cost by site;
+- the fit against the application's assessment budget.
+
+**Taken from the simulation:** how often the algorithm triggers at each threshold, how
+often an audit finds it negative, and its true and observed miss rate and PPV. Those rest
+on a stand-in algorithm and uncalibrated trajectories, so they are presets in
+`src/responsiveness.js`, regenerated from `simulations/` when AURORA's real trigger rule
+and pilot data arrive, rather than settings to tune.
+
+Statistical notes:
+
+- **Dropout.** Exponential, reaching `controlAttrition` at day 112. Audits are requested
+  only while the participant is enrolled, so the share requested is their mean survival
+  over the eligible days. Triggers cluster early in follow-up, so they are discounted by
+  survival to their mean day instead. At the simulation's own 20% attrition this
+  reproduces its request rates within 0.005 at every threshold.
+- **Precision is binomial** at the observed (as-scored) rate, taking whichever HAM-D model
+  gives the wider interval. Repeated audits on one person are correlated, but the
+  simulated intervals match the binomial within 0.002 at 1, 2 and 4 audits per person.
+  No arm-level multiplicity applies; alpha and the small-sample t do, as in the ICC and DIF
+  panels.
+- **Rater error is the binding problem.** It inflates the observed miss rate several-fold:
+  at a 5-point change it is 0.02–0.07 in truth but 0.22–0.26 with one rater. PPV, as
+  defined, barely moves. The panel shows true and as-scored values for both HAM-D models,
+  so the scoring choice is visible alongside the precision it buys.
+- **Load and cost.** Peak weekly load assumes even enrollment over `respEnrollWeeks`, or
+  16 weeks if enrollment is faster. Each interview takes 40 minutes of rater time, plus 25
+  for each extra rater scoring the recording, and 45 minutes of the participant's. Hourly
+  rates and per-site cost factors come from the budget module (see "Budget figures"
+  below); sites whose assessment is covered by salaried staff are reported as staff time.
+- **Budget fit.** The budget pays a number of assessment hours per patient; the scheduled
+  interviews take 140–255 minutes. The panel reports whether the design's rater hours fit
+  in the remaining margin, spread over the app users.
+
+## Budget figures
+
+The cost and budget-fit estimates use figures from the AURORA application budget, which
+is internal and is not in this public repository.
+
+- `src/budget.example.js` (committed) holds clearly labeled placeholder figures. The public
+  site, which CI builds, shows these, and the panel marks its costs as placeholders.
+- `src/budget.local.js` (gitignored) holds the real figures on study-team machines. When it
+  exists, `vite.config.js` points imports of `src/budget.js` at it, so `npm run dev` and a
+  local `npm run build` show real costs. `AURORA_PUBLIC_BUILD=1 npm run build` forces the
+  placeholders.
+- `npm run verify` always runs on the placeholders, and its cost checks are written as
+  formulas over the imported rates, so they pass with either file.
+
+Don't publish a local build made with the real figures: its bundle and source maps contain
+them. To set up a new machine, copy `src/budget.example.js` to `src/budget.local.js` and
+fill in the figures from the application budget.
+
+## Simulations
+
+`simulations/` holds the Python simulations behind the Aim 2.2 presets, with their output
+from 22 October 2026. They need numpy and run from inside the folder, because the second
+imports the first:
+
+```bash
+cd simulations
+python aurora_random_hamd_audit_sim.py --reps 200        # random audits by number and design
+python aurora_responsiveness_interview_sim.py --reps 200 # triggered interviews, timing, slots, cost
+python aurora_responsiveness_interview_sim.py --reps 200 --recall 7   # HAM-D reflects the past week
+python aurora_responsiveness_interview_sim.py --presets --reps 200    # the calculator's presets
+```
+
+The cost tables read the same budget module as the app (through Node), so on a study-team
+machine they show the internal figures. Run with `AURORA_PUBLIC_BUILD=1` before saving
+output into this folder; the saved output uses the placeholders.
+
+After regenerating the presets, copy them into `src/responsiveness.js` and run
+`npm run verify`. Several checks pin the panel to the simulation it summarizes, so a
+changed simulation shows up there.
+
 ## The pooled contrast
 
 `A+B vs C` is not a merged arm run through the pairwise machinery. Under hybrid the pooled
@@ -266,9 +364,16 @@ combining the **current configuration token with the section fragment**, e.g.
 which is what makes a figure citable from a memo.
 
 Stable ids: `design-summary`, `trial-design`, `parameters`, `measurement-model`,
-`icc-validation`, `site-feasibility`, `spillover`, `fairness`, `chart-hamd`,
+`icc-validation`, `responsiveness`, `site-feasibility`, `spillover`, `fairness`, `chart-hamd`,
 `chart-retention`, `chart-icc`, `sample-size`, `r-code`. Treat them as a wire format like
 `FIELD_ORDER` — renaming one breaks every link already circulating.
+
+Headings are also numbered, for citing a panel in a meeting ("section 6"). The numbers
+live in `SECTION_NUMBERS` in `src/App.jsx` and are fixed per panel rather than computed
+from page order, so a panel the current design hides (the spillover substudy, in two-arm
+mode) leaves a gap instead of renumbering everything after it. Treat them like the ids:
+give a new panel a new number, or a sub-number such as `6a`, rather than shifting existing
+ones that memos may already cite.
 
 Two things this needs that a plain `#id` does not. React renders after the document is
 parsed, so a fragment in the initial URL never resolves natively (the target does not exist

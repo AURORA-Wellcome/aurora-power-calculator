@@ -23,3 +23,9 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Python
+__pycache__/
+
+# Internal budget figures (see README, "Budget figures")
+src/budget.local.js

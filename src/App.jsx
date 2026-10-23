@@ -20,6 +20,13 @@ import {
 import { createModel, cohensH, ARM_LABELS } from "./calc";
 import { parseRoster, feasibility } from "./sites";
 import { buildRCode } from "./rcode";
+import {
+  BUDGET_IS_ILLUSTRATIVE,
+  BUDGET_SOURCE,
+  RATER_RATE,
+  PATIENT_RATE,
+  BUDGETED_ASSESSMENT_HOURS,
+} from "./responsiveness";
 import { defaults } from "./defaults";
 import {
   decodeSettings,
@@ -59,6 +66,9 @@ const CONTRAST_TEXT_COLORS = {
 // compete with the contrast series; they are told apart by dash pattern and weight.
 const PRACTICALITY_NOTE =
   "The spillover comparison is between clinicians, so a site with a single mixed clinician has its whole contribution confounded with that one person's practice, and contributes nothing usable. Sites are listed smallest last, because that is where the design fails first.";
+
+const RESPONSIVENESS_NOTE =
+  "Aim 2.2 promises PPV, sensitivity and specificity for AURORA-detected severity shifts, from extra clinician ratings within 24 hours of a detected shift and at random. Only the AURORA arms have an algorithm to check. Counts, precision, load and cost are computed here; how often the algorithm triggers and how often it is right come from a simulation with a stand-in algorithm, to be rerun once AURORA's real trigger rule is fixed.";
 
 const INK_MUTED = "#898781";
 const INK_SECONDARY = "#52514e";
@@ -129,6 +139,28 @@ const CheckIcon = () => (
   </svg>
 );
 
+// Section numbers, for citing a panel in a meeting or memo ("see section 6"). Fixed per
+// panel rather than computed from page order, so a panel the current design hides
+// (spillover, in two-arm mode) leaves a gap instead of renumbering the rest. Like the
+// anchor ids, treat them as a citation format: give a new panel a new number, or a
+// sub-number such as "6a", rather than shifting existing ones.
+const SECTION_NUMBERS = {
+  "design-summary": "1",
+  "trial-design": "2",
+  parameters: "3",
+  "measurement-model": "4",
+  "icc-validation": "5",
+  responsiveness: "6",
+  "site-feasibility": "7",
+  spillover: "8",
+  fairness: "9",
+  "chart-hamd": "10",
+  "chart-retention": "11",
+  "chart-icc": "12",
+  "sample-size": "13",
+  "r-code": "14",
+};
+
 // Deep-linkable section heading. The anchor copies the CURRENT configuration token
 // alongside the fragment, so a link lands on the right panel showing the right numbers -
 // which is what makes it useful for citing a specific figure in a memo.
@@ -145,7 +177,10 @@ function SectionHeading({
       id={id}
       className={`group flex items-center gap-1.5 font-semibold text-sm md:text-base scroll-mt-4 ${className}`}
     >
-      <span>{children}</span>
+      <span>
+        {SECTION_NUMBERS[id] && `${SECTION_NUMBERS[id]}. `}
+        {children}
+      </span>
       {info && (
         <span
           className="text-gray-600 hover:text-gray-700 cursor-help font-normal"
@@ -248,6 +283,11 @@ export default function PowerCurves() {
     mixedShare,
     spilloverPreset,
     siteRoster,
+    respAudits,
+    respTrigger,
+    respScoring,
+    respCompletion,
+    respEnrollWeeks,
   } = settings;
 
   const threeArm = designArms === 3;
@@ -458,6 +498,7 @@ export default function PowerCurves() {
   const currentIcc = model.icc(currentN);
   const currentAlloc = model.allocation(currentN);
   const currentDif = model.dif(currentN);
+  const currentResp = model.responsiveness(currentN);
   const currentSpill = model.spillover(currentN);
 
   // Site feasibility uses the SCALED roster (the one the power numbers actually use), so
@@ -1575,6 +1616,314 @@ export default function PowerCurves() {
               />
             </div>
           </div>
+        </section>
+
+        {/* Responsiveness interviews (Aim 2.2) */}
+        <section className={cardCls} aria-labelledby="responsiveness">
+          <SectionHeading
+            id="responsiveness"
+            className="mb-1"
+            onCopy={copyAnchor}
+            copied={copiedAnchor === "responsiveness"}
+            info={RESPONSIVENESS_NOTE}
+          >
+            Responsiveness Interviews (arms {currentResp.armKeys.join(" + ")})
+          </SectionHeading>
+          <p className="text-xs text-gray-600 mb-3">
+            Extra HAM-D interviews for Aim 2.2. Random audits estimate how often
+            the algorithm misses a change; interviews it triggers estimate PPV.
+            A trigger fires when the algorithm&apos;s estimate has moved by the
+            threshold since the last HAM-D, at most once per four-week interval.
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4">
+            <div>
+              <label className={labelCls} htmlFor="s-respAudits">
+                Random audits per participant
+              </label>
+              <select
+                id="s-respAudits"
+                value={respAudits}
+                onChange={(e) => set("respAudits")(parseInt(e.target.value))}
+                className={selectCls}
+              >
+                {[0, 1, 2, 3, 4, 5, 6].map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                    {k === 2 ? " (proposed)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="s-respTrigger">
+                Trigger threshold
+              </label>
+              <select
+                id="s-respTrigger"
+                value={respTrigger}
+                onChange={(e) => set("respTrigger")(parseInt(e.target.value))}
+                className={selectCls}
+              >
+                <option value={3}>3 points (the MCID)</option>
+                <option value={4}>4 points</option>
+                <option value={5}>5 points (proposed)</option>
+                <option value={7}>7 points</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="s-respScoring">
+                Scoring of each interview
+              </label>
+              <select
+                id="s-respScoring"
+                value={respScoring}
+                onChange={(e) => set("respScoring")(e.target.value)}
+                className={selectCls}
+              >
+                <option value="single">One rater (SEM 2.5)</option>
+                <option value="consensus">Three raters (SEM 1.5)</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="s-respCompletion">
+                Interviews completed: {(respCompletion * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                id="s-respCompletion"
+                min="0.3"
+                max="1"
+                step="0.05"
+                value={respCompletion}
+                onChange={(e) =>
+                  set("respCompletion")(parseFloat(e.target.value))
+                }
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="s-respEnrollWeeks">
+                Enrollment period: {respEnrollWeeks} weeks
+              </label>
+              <input
+                type="range"
+                id="s-respEnrollWeeks"
+                min="8"
+                max="80"
+                step="1"
+                value={respEnrollWeeks}
+                onChange={(e) =>
+                  set("respEnrollWeeks")(parseInt(e.target.value))
+                }
+                className="w-full"
+              />
+              <div className="text-xs text-gray-600">
+                35 is the protocol&apos;s recruitment table; the grant&apos;s
+                WP4.1 implies about 22
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-4 mt-3 pt-3 border-t text-xs md:text-sm">
+            <div className="bg-gray-50 p-2 md:p-3 rounded">
+              <div className="text-gray-600 text-xs">Extra interviews</div>
+              <div className="text-lg md:text-xl font-bold text-gray-700">
+                {currentResp.requested.toFixed(1)}
+              </div>
+              <div className="text-gray-600 text-xs">
+                requested per app user, up to {currentResp.maxExtra};{" "}
+                {Math.round(currentResp.nInterviews).toLocaleString()} completed
+                in total
+              </div>
+            </div>
+            <div className="bg-blue-50 p-2 md:p-3 rounded">
+              <div className="text-gray-600 text-xs">Miss rate precision</div>
+              <div className="text-lg md:text-xl font-bold text-blue-700">
+                {Number.isFinite(currentResp.missHalfWidth)
+                  ? `±${currentResp.missHalfWidth.toFixed(3)}`
+                  : "—"}
+              </div>
+              <div className="text-gray-600 text-xs">
+                {Number.isFinite(currentResp.missHalfWidth)
+                  ? `${Math.round(currentResp.nNegative).toLocaleString()} negative audits; ±${currentResp.missHalfWidthSubgroup.toFixed(2)} in the smallest fairness subgroup (section ${SECTION_NUMBERS.fairness})`
+                  : "no random audits, so no miss rate"}
+              </div>
+            </div>
+            <div className="bg-blue-50 p-2 md:p-3 rounded">
+              <div className="text-gray-600 text-xs">PPV precision</div>
+              <div className="text-lg md:text-xl font-bold text-blue-700">
+                ±{currentResp.ppvHalfWidth.toFixed(3)}
+              </div>
+              <div className="text-gray-600 text-xs">
+                {Math.round(currentResp.nTriggered).toLocaleString()} triggered
+                interviews ({ciLevel}% CI)
+              </div>
+            </div>
+            <div className="bg-purple-50 p-2 md:p-3 rounded">
+              <div className="text-gray-600 text-xs">
+                Peak load, busiest site
+              </div>
+              <div className="text-lg md:text-xl font-bold text-purple-700">
+                {currentResp.largest.perWeek.toFixed(1)}/week
+              </div>
+              <div className="text-gray-600 text-xs">
+                {currentResp.largest.raterHoursPerWeek.toFixed(1)} rater hours,
+                against {currentResp.largest.scheduledHoursPerWeek.toFixed(1)}{" "}
+                for scheduled interviews
+              </div>
+            </div>
+            <div className="bg-gray-50 p-2 md:p-3 rounded">
+              <div className="text-gray-600 text-xs">
+                Cost over the trial
+                {BUDGET_IS_ILLUSTRATIVE && " (placeholder rates)"}
+              </div>
+              <div className="text-lg md:text-xl font-bold text-gray-700">
+                ${Math.round(currentResp.totalCost).toLocaleString()}
+              </div>
+              <div className="text-gray-600 text-xs">
+                ${Math.round(currentResp.staffCost).toLocaleString()} of it
+                staff time; $
+                {currentResp.costPerInterview.toFixed(2)} per interview
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+            <table className="w-full text-xs md:text-sm min-w-[480px] tabular-nums">
+              <caption className="text-left text-xs text-gray-600 mb-1">
+                What the simulation shows at a {currentResp.threshold}-point
+                trigger, scored by {currentResp.scoring.label.toLowerCase()}
+              </caption>
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-1.5 md:p-2"></th>
+                  <th className="text-left p-1.5 md:p-2">
+                    HAM-D reflects the interview day
+                  </th>
+                  <th className="text-left p-1.5 md:p-2">
+                    HAM-D reflects the past week
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Miss rate, true", (m) => m.missTrue],
+                  ["Miss rate, as scored", (m) => m.missObserved[respScoring]],
+                  ["PPV, true", (m) => m.ppvTrue],
+                  ["PPV, as scored", (m) => m.ppvObserved[respScoring]],
+                ].map(([label, get]) => (
+                  <tr key={label} className="border-b hover:bg-gray-50">
+                    <td className="p-1.5 md:p-2 text-gray-600">{label}</td>
+                    <td className="p-1.5 md:p-2">
+                      {get(currentResp.preset.sameDay).toFixed(2)}
+                    </td>
+                    <td className="p-1.5 md:p-2">
+                      {get(currentResp.preset.pastWeek).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-600 mt-2">
+            The miss rate is the share of audits the algorithm scores negative
+            that hold a real change of at least the threshold. PPV is the share
+            of triggers followed by a change of 3 or more points in the flagged
+            direction. Rater error inflates the observed miss rate several-fold
+            but barely moves PPV, so scoring matters more than adding audits.
+            Precision is binomial at the observed rate, under whichever HAM-D
+            model gives the wider interval.
+          </p>
+
+          <p
+            className={`mt-2 text-xs ${
+              currentResp.budgetFit === "fits"
+                ? "text-teal-700"
+                : currentResp.budgetFit === "tight"
+                  ? "text-orange-700"
+                  : "text-red-700"
+            }`}
+          >
+            {BUDGET_IS_ILLUSTRATIVE &&
+              "Placeholder budget figures: the public build does not carry the application budget. "}
+            This design needs {currentResp.raterHoursPerUser.toFixed(1)} rater
+            hours per app user. The budget pays {BUDGETED_ASSESSMENT_HOURS}{" "}
+            assessment hours per patient, and the scheduled interviews take
+            2.3–4.3, which leaves{" "}
+            {currentResp.budgetMargin[0].toFixed(1)}–
+            {currentResp.budgetMargin[1].toFixed(1)} hours per app user.{" "}
+            {currentResp.budgetFit === "fits"
+              ? "If that margin was meant for these interviews, the design fits within it."
+              : currentResp.budgetFit === "tight"
+                ? "The design fits within that margin only if the scheduled interviews run short."
+                : "The design needs more than that margin."}
+          </p>
+
+          <details className="mt-3 pt-3 border-t">
+            <summary className="cursor-pointer text-xs md:text-sm font-medium">
+              Load and cost by site
+            </summary>
+            <div className="mt-2 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0">
+              <table className="w-full text-xs md:text-sm min-w-[640px] tabular-nums">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-1.5 md:p-2">Site</th>
+                    <th className="text-left p-1.5 md:p-2">App users</th>
+                    <th className="text-left p-1.5 md:p-2">
+                      Interviews completed
+                    </th>
+                    <th className="text-left p-1.5 md:p-2">Per week at peak</th>
+                    <th className="text-left p-1.5 md:p-2">Rater h/week</th>
+                    <th className="text-left p-1.5 md:p-2">
+                      Scheduled interview h/week
+                    </th>
+                    <th className="text-left p-1.5 md:p-2">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentResp.sites.map((st, i) => (
+                    <tr key={i} className="border-b hover:bg-gray-50">
+                      <td className="p-1.5 md:p-2">{st.name}</td>
+                      <td className="p-1.5 md:p-2">
+                        {Math.round(st.appUsers)}
+                      </td>
+                      <td className="p-1.5 md:p-2">
+                        {Math.round(st.interviews)}
+                      </td>
+                      <td className="p-1.5 md:p-2">{st.perWeek.toFixed(1)}</td>
+                      <td className="p-1.5 md:p-2">
+                        {st.raterHoursPerWeek.toFixed(1)}
+                      </td>
+                      <td className="p-1.5 md:p-2">
+                        {st.scheduledHoursPerWeek.toFixed(1)}
+                      </td>
+                      <td className="p-1.5 md:p-2">
+                        ${Math.round(st.cost).toLocaleString()}
+                        {st.staff && (
+                          <span className="text-gray-600"> (staff time)</span>
+                        )}
+                        {!st.costed && (
+                          <span className="text-gray-600"> (US rates)</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-600 mt-2">
+              Peak load assumes even enrollment over {respEnrollWeeks} weeks (at
+              least 16), with each participant&apos;s interviews spread over
+              their 16 weeks. Each interview takes 40 minutes of rater time,
+              plus 25 for each extra rater scoring the recording, and 45 minutes
+              of the participant&apos;s, at ${RATER_RATE.toFixed(2)} and $
+              {PATIENT_RATE.toFixed(2)} an hour ({BUDGET_SOURCE}). Sites can be
+              scaled by per-site cost factors. How soon to hold a triggered interview, and
+              how many slots to reserve, are in the simulation (simulations/ in
+              this repository).
+            </p>
+          </details>
         </section>
 
         {/* Site feasibility */}
@@ -2822,7 +3171,7 @@ export default function PowerCurves() {
                 id="r-code-heading"
                 className="font-semibold text-sm md:text-base"
               >
-                R Code for Verification
+                {SECTION_NUMBERS["r-code"]}. R Code for Verification
               </h2>
               <span className="text-gray-600">{showRCode ? "−" : "+"}</span>
             </button>

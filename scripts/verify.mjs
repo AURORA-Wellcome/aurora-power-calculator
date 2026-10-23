@@ -33,6 +33,21 @@ import {
   FIELD_ORDER,
   SETTING_SPEC,
 } from "../src/urlState.js";
+import {
+  AUDIT_DAYS,
+  SCHEDULED_DAYS,
+  TRIGGER_THRESHOLDS,
+  INTERVIEW_PRESETS,
+  HAMD_MODELS,
+  SCORING,
+  RATER_MINUTES,
+  EXTRA_RATER_MINUTES,
+  PATIENT_MINUTES,
+  RATER_RATE,
+  PATIENT_RATE,
+  SITE_COSTING,
+  BUDGET_IS_ILLUSTRATIVE,
+} from "../src/responsiveness.js";
 
 let passed = 0;
 let failed = 0;
@@ -889,6 +904,20 @@ section("7. Shipped defaults");
     "3-arm still costs more than 2-arm under the shipped defaults",
     h3.mde > h.mde,
     `${h3.mde.toFixed(3)} vs ${h.mde.toFixed(3)} (+${((h3.mde / h.mde - 1) * 100).toFixed(1)}%)`,
+  );
+  // The responsiveness defaults are the design proposed for the 29 October 2026
+  // decision, so a change to them is a change to that proposal.
+  ok(
+    "default responsiveness design: 2 audits, 5-point trigger, three raters",
+    defaults.respAudits === 2 &&
+      defaults.respTrigger === 5 &&
+      defaults.respScoring === "consensus",
+    `${defaults.respAudits} / ${defaults.respTrigger} / ${defaults.respScoring}`,
+  );
+  ok(
+    "default interview completion 85%, enrollment over 35 weeks",
+    defaults.respCompletion === 0.85 && defaults.respEnrollWeeks === 35,
+    `${defaults.respCompletion} / ${defaults.respEnrollWeeks}`,
   );
 }
 
@@ -2154,6 +2183,314 @@ section("8. Fairness / DIF substudy");
               finite = false;
           }
     ok("DIF outputs stay finite across the UI's parameter space", finite);
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("8b. Responsiveness interviews (Aim 2.2)");
+// ---------------------------------------------------------------------------
+// Counts, precision, load and cost are closed-form; the algorithm's behaviour comes from
+// simulation presets. The checks pin the formulas to the simulation they summarize, so a
+// change to either shows up here.
+
+{
+  const base3 = {
+    ...defaults,
+    designArms: 3,
+    allocA: 40,
+    allocB: 30,
+    allocC: 30,
+    smallSampleT: false,
+  };
+  const N = 1000;
+  const r = (o = {}) => createModel({ ...base3, ...o }).responsiveness(N);
+
+  // Only the arms that use AURORA have an algorithm to audit.
+  ok(
+    "2-arm interviews draw on arm A only",
+    createModel({ ...defaults, designArms: 2 })
+      .responsiveness(N)
+      .armKeys.join("+") === "A",
+  );
+  ok("3-arm interviews draw on arms A and B", r().armKeys.join("+") === "A+B");
+
+  // Protocol schedule: audits on days 7-111, never within 3 days of a scheduled HAM-D.
+  ok(
+    "81 eligible audit days",
+    AUDIT_DAYS.length === 81,
+    String(AUDIT_DAYS.length),
+  );
+  ok(
+    "no audit day within 3 days of a scheduled HAM-D",
+    AUDIT_DAYS.every((d) => SCHEDULED_DAYS.every((s) => Math.abs(s - d) > 3)),
+  );
+
+  // At the simulation's own 20% attrition the request rates must reproduce it: 1.79
+  // audits per app user at two audits, and the next-day trigger rates by threshold.
+  {
+    const at20 = (o = {}) => r({ controlAttrition: 0.2, ...o });
+    close(
+      "audit requests at 20% attrition match the simulation",
+      at20().auditsRequested,
+      1.79,
+      0.01,
+    );
+    for (const [t, sim] of [
+      [3, 2.12],
+      [4, 1.34],
+      [5, 0.79],
+      [7, 0.25],
+    ]) {
+      close(
+        `trigger requests at ${t} points match the simulation`,
+        at20({ respTrigger: t }).triggersRequested,
+        sim,
+        0.01,
+      );
+    }
+  }
+
+  // Precision against the simulated intervals (700 app users, 20% attrition, 85%
+  // completion, one rater, 3-point change): +/-0.051, 0.035 and 0.026 at 1, 2 and 4
+  // audits, and +/-0.043-0.044 for PPV at a 5-point trigger. The binomial scales as
+  // 1/sqrt(n), so rescale to 700 app users.
+  for (const [k, sim] of [
+    [1, 0.051],
+    [2, 0.035],
+    [4, 0.026],
+  ]) {
+    const x = r({
+      controlAttrition: 0.2,
+      respTrigger: 3,
+      respScoring: "single",
+      respAudits: k,
+    });
+    close(
+      `miss-rate half-width at ${k} audit(s) matches the simulation`,
+      x.missHalfWidth * Math.sqrt(x.nAppUsers / 700),
+      sim,
+      0.003,
+    );
+  }
+  {
+    const x = r({ controlAttrition: 0.2, respScoring: "single" });
+    close(
+      "PPV half-width matches the simulation",
+      x.ppvHalfWidth * Math.sqrt(x.nAppUsers / 700),
+      0.0435,
+      0.003,
+    );
+  }
+
+  // Accounting identities.
+  {
+    const x = r();
+    close(
+      "requested = audits + triggers",
+      x.requested,
+      x.auditsRequested + x.triggersRequested,
+      1e-12,
+    );
+    close(
+      "completed = requested x completion",
+      x.completed,
+      x.requested * base3.respCompletion,
+      1e-12,
+    );
+    ok(
+      "consent maximum is the audits plus one per four-week interval",
+      x.maxExtra === base3.respAudits + 4,
+      String(x.maxExtra),
+    );
+    close(
+      "site interviews sum to the total",
+      x.sites.reduce((a, st) => a + st.interviews, 0),
+      x.nInterviews,
+      1e-9,
+    );
+    close(
+      "site costs sum to the total",
+      x.sites.reduce((a, st) => a + st.cost, 0),
+      x.totalCost,
+      1e-6,
+    );
+    // Cost per interview from the budget module's rates, so these hold for the public
+    // placeholders and the internal figures alike.
+    const perInterview = (raters) =>
+      (RATER_MINUTES / 60) * RATER_RATE +
+      (PATIENT_MINUTES / 60) * PATIENT_RATE +
+      (raters - 1) * (EXTRA_RATER_MINUTES / 60) * RATER_RATE;
+    close(
+      "one rater: interviewer plus participant time per interview",
+      r({ respScoring: "single" }).costPerInterview,
+      perInterview(1),
+      1e-9,
+    );
+    close(
+      "three raters: plus two scorers per interview",
+      x.costPerInterview,
+      perInterview(3),
+      1e-9,
+    );
+    ok(
+      "sites flagged as staff in the budget are costed as staff time",
+      x.sites
+        .filter((st) => st.staff)
+        .map((st) => st.name)
+        .sort()
+        .join(",") ===
+        x.sites
+          .filter((st) => SITE_COSTING[st.name]?.staff)
+          .map((st) => st.name)
+          .sort()
+          .join(","),
+    );
+    ok(
+      "Node checks run on the public placeholder budget",
+      BUDGET_IS_ILLUSTRATIVE === true,
+    );
+    ok(
+      "a custom roster is costed at US rates",
+      createModel({ ...base3, siteRoster: "300-30.200-20" })
+        .responsiveness(N)
+        .sites.every((st) => !st.costed),
+    );
+    close(
+      "subgroup interval = overall / sqrt(subgroup share)",
+      x.missHalfWidthSubgroup,
+      x.missHalfWidth / Math.sqrt(base3.difSubgroupShare),
+      1e-12,
+    );
+    // At the plateau each week's cohort contributes all its interviews.
+    const st = x.sites[0];
+    close(
+      "peak load x enrollment weeks = the site's requests",
+      st.perWeek * base3.respEnrollWeeks,
+      st.appUsers * x.requested,
+      1e-9,
+    );
+    const fast = r({ respEnrollWeeks: 10 }).sites[0];
+    close(
+      "enrolling in under 16 weeks spreads the load over 16",
+      fast.perWeek * 16,
+      fast.appUsers * x.requested,
+      1e-9,
+    );
+  }
+
+  // Direction of effects.
+  ok(
+    "more audits narrow the miss-rate interval",
+    r({ respAudits: 4 }).missHalfWidth < r({ respAudits: 2 }).missHalfWidth,
+  );
+  ok(
+    "a higher threshold requests fewer interviews",
+    r({ respTrigger: 7 }).triggersRequested <
+      r({ respTrigger: 3 }).triggersRequested,
+  );
+  ok(
+    "more attrition, fewer requests",
+    r({ controlAttrition: 0.4 }).requested <
+      r({ controlAttrition: 0.1 }).requested,
+  );
+  ok(
+    "three raters cost more than one",
+    r().totalCost > r({ respScoring: "single" }).totalCost,
+  );
+  ok(
+    "three raters narrow the miss-rate interval",
+    r().missHalfWidth < r({ respScoring: "single" }).missHalfWidth,
+  );
+  {
+    const none = r({ respAudits: 0 });
+    ok(
+      "no audits leaves the miss rate unestimated but PPV intact",
+      !Number.isFinite(none.missHalfWidth) &&
+        Number.isFinite(none.ppvHalfWidth) &&
+        none.auditsRequested === 0,
+    );
+  }
+
+  // Against the application's assessment budget.
+  {
+    const x = r();
+    ok(
+      "budget margin is ordered",
+      x.budgetMargin[0] < x.budgetMargin[1],
+      x.budgetMargin.map((v) => v.toFixed(2)).join(" - "),
+    );
+    // The verdict follows the margins whatever the budget figures are.
+    const verdict = (y) =>
+      y.raterHoursPerUser <= y.budgetMargin[0]
+        ? "fits"
+        : y.raterHoursPerUser <= y.budgetMargin[1]
+          ? "tight"
+          : "exceeds";
+    for (const sc of ["consensus", "single"]) {
+      const y = r({ respScoring: sc });
+      ok(
+        `budget verdict matches the margins (${sc})`,
+        y.budgetFit === verdict(y),
+        `${y.budgetFit}: ${y.raterHoursPerUser.toFixed(2)} h vs ${y.budgetMargin.map((v) => v.toFixed(2)).join(" - ")}`,
+      );
+    }
+    ok(
+      "fewer raters need fewer hours against the same margin",
+      r({ respScoring: "single" }).raterHoursPerUser < x.raterHoursPerUser,
+    );
+  }
+
+  // Every threshold the codec accepts has a complete preset.
+  ok(
+    "codec thresholds match the presets",
+    SETTING_SPEC.respTrigger.values.join() === TRIGGER_THRESHOLDS.join() &&
+      TRIGGER_THRESHOLDS.every((t) => INTERVIEW_PRESETS[t]),
+  );
+  ok(
+    "every preset covers both HAM-D models and both scorings",
+    TRIGGER_THRESHOLDS.every((t) =>
+      HAMD_MODELS.every((m) =>
+        ["missObserved", "ppvObserved"].every((k) =>
+          Object.keys(SCORING).every((sc) =>
+            Number.isFinite(INTERVIEW_PRESETS[t][m][k][sc]),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  // Everything finite across the parameter space the UI exposes (k = 0 excepted, where
+  // the miss rate is deliberately undefined).
+  {
+    let finite = true;
+    for (const t of TRIGGER_THRESHOLDS)
+      for (const k of [1, 2, 6])
+        for (const sc of Object.keys(SCORING))
+          for (const arms of [2, 3])
+            for (const w of [8, 35, 80]) {
+              const x = createModel({
+                ...defaults,
+                designArms: arms,
+                respTrigger: t,
+                respAudits: k,
+                respScoring: sc,
+                respEnrollWeeks: w,
+              }).responsiveness(N);
+              if (
+                ![
+                  x.missHalfWidth,
+                  x.ppvHalfWidth,
+                  x.totalCost,
+                  x.largest.perWeek,
+                  x.raterHoursPerUser,
+                ].every(Number.isFinite)
+              )
+                finite = false;
+            }
+    ok(
+      "responsiveness outputs stay finite across the UI's parameter space",
+      finite,
+    );
   }
 }
 

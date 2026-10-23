@@ -101,4 +101,20 @@ export const defaults = {
   expectedIcc: 0.8,
   iccClusterCorr: 0.03,
   nFollowups: 4,
+
+  // Responsiveness interviews (Aim 2.2): extra HAM-Ds in the arms that use AURORA. The
+  // defaults are the design proposed for the 29 October 2026 decision: two random audits
+  // per participant, a triggered interview when the algorithm's estimate moves 5 or more
+  // HAM-D points (about the reliable change for a HAM-D scored by three raters), and three
+  // raters scoring each recording, because rater error otherwise inflates the observed
+  // miss rate several-fold. How the algorithm behaves at each threshold is a simulation
+  // preset (responsiveness.js), not a setting.
+  respAudits: 2,
+  respTrigger: 5,
+  respScoring: "consensus",
+  respCompletion: 0.85,
+  // Even enrollment over this many weeks sets the peak weekly load. 35 is the protocol's
+  // July 2027 - February 2028 recruitment table; the grant's WP4.1 envelope implies about
+  // 22.
+  respEnrollWeeks: 35,
 };

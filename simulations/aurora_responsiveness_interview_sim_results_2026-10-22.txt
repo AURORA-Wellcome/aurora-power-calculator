@@ -1,0 +1,219 @@
+$ AURORA_PUBLIC_BUILD=1 python aurora_responsiveness_interview_sim.py --reps 200   (placeholder budget figures; see the README)
+Triggered interviews: n = 700 app users, 200 reps, HAM-D recall = 1 day(s)
+
+PPV: confirmed when the change since the last HAM-D is >= delta in the flagged
+direction ('same'), or >= 3 points, the MCID, in the flagged direction ('>=3').
+worse = share of triggers flagging deterioration.
+
+delta delay | fired/pt done/pt worse | true PPV: same, at trigger  same  >=3
+----------------------------------------------------------------------------
+    3     0 |     2.23    1.89  0.35 |                    0.449 0.449 0.449
+    3     1 |     2.12    1.80  0.35 |                    0.443 0.394 0.394
+    3     2 |     2.12    1.79  0.35 |                    0.444 0.364 0.364
+    3     3 |     1.99    1.68  0.35 |                    0.439 0.344 0.344
+    3     7 |     1.70    1.43  0.36 |                    0.426 0.322 0.322
+    4     0 |     1.43    1.22  0.31 |                    0.387 0.387 0.547
+    4     1 |     1.34    1.13  0.31 |                    0.380 0.336 0.481
+    4     2 |     1.34    1.13  0.31 |                    0.380 0.310 0.445
+    4     3 |     1.23    1.04  0.32 |                    0.373 0.288 0.417
+    4     7 |     1.00    0.83  0.33 |                    0.353 0.272 0.386
+    5     0 |     0.87    0.73  0.28 |                    0.334 0.334 0.643
+    5     1 |     0.79    0.67  0.28 |                    0.326 0.287 0.569
+    5     2 |     0.79    0.67  0.28 |                    0.324 0.264 0.529
+    5     3 |     0.71    0.60  0.29 |                    0.313 0.247 0.497
+    5     7 |     0.55    0.46  0.29 |                    0.290 0.235 0.459
+    7     0 |     0.28    0.24  0.21 |                    0.250 0.250 0.806
+    7     1 |     0.25    0.21  0.21 |                    0.236 0.210 0.738
+    7     2 |     0.25    0.21  0.21 |                    0.236 0.194 0.697
+    7     3 |     0.21    0.18  0.22 |                    0.219 0.172 0.662
+    7     7 |     0.15    0.12  0.23 |                    0.188 0.168 0.606
+
+Observed PPV, with rater error on both HAM-Ds (mean, 95% half-width across trials)
+delta delay | SEM 2.5: same  +/-    >=3  +/- | SEM 1.5: same  +/-    >=3  +/-
+-----------------------------------------------------------------------------
+    3     0 |          0.473 0.027  0.473 0.027 |          0.462 0.027  0.462 0.027
+    3     1 |          0.438 0.026  0.438 0.026 |          0.419 0.026  0.419 0.026
+    3     2 |          0.419 0.026  0.419 0.026 |          0.395 0.026  0.395 0.026
+    3     3 |          0.402 0.028  0.402 0.028 |          0.375 0.027  0.375 0.027
+    3     7 |          0.382 0.033  0.382 0.033 |          0.352 0.031  0.352 0.031
+    4     0 |          0.435 0.031  0.528 0.032 |          0.415 0.029  0.537 0.032
+    4     1 |          0.402 0.033  0.491 0.034 |          0.372 0.033  0.487 0.031
+    4     2 |          0.380 0.031  0.467 0.035 |          0.346 0.033  0.457 0.034
+    4     3 |          0.364 0.038  0.450 0.037 |          0.328 0.035  0.435 0.037
+    4     7 |          0.345 0.038  0.425 0.040 |          0.308 0.039  0.406 0.042
+    5     0 |          0.404 0.040  0.585 0.045 |          0.373 0.040  0.610 0.044
+    5     1 |          0.365 0.041  0.542 0.043 |          0.330 0.038  0.555 0.045
+    5     2 |          0.347 0.043  0.520 0.049 |          0.308 0.043  0.525 0.049
+    5     3 |          0.332 0.042  0.503 0.044 |          0.290 0.042  0.502 0.046
+    5     7 |          0.310 0.052  0.471 0.057 |          0.269 0.052  0.464 0.057
+    7     0 |          0.344 0.067  0.697 0.071 |          0.300 0.065  0.749 0.066
+    7     1 |          0.309 0.076  0.652 0.077 |          0.259 0.071  0.694 0.076
+    7     2 |          0.291 0.072  0.629 0.074 |          0.241 0.063  0.660 0.074
+    7     3 |          0.272 0.079  0.607 0.082 |          0.223 0.077  0.633 0.087
+    7     7 |          0.258 0.103  0.568 0.103 |          0.212 0.094  0.585 0.100
+
+Random audits, k = 2, same draws (n = 700)
+delta | requested/pt done/pt | miss true obs2.5 obs1.5 | sens true obs2.5 obs1.5
+--------------------------------------------------------------------------------
+    3 |         1.79    1.52 |     0.247  0.495  0.371 |     0.400  0.291  0.329
+    4 |         1.79    1.52 |     0.135  0.367  0.241 |     0.340  0.188  0.239
+    5 |         1.79    1.52 |     0.072  0.265  0.151 |     0.307  0.126  0.185
+    7 |         1.79    1.52 |     0.018  0.125  0.051 |     0.247  0.059  0.118
+
+Site load at delta = 5, delay = 1 day(s): 0.79 triggered requests and 0.67 completed per app user; a scheduled audit is requested 0.89 and completed 0.76 of the time.
+Budget figures: illustrative placeholder figures.
+Cost per completed interview at US rates: $45.42 (+$16.67 for each extra rater scoring the recording).
+Peak load assumes even enrollment over 35 weeks.
+
+Extra interviews requested per app user, k = 2 random + triggered: 0: 5%, 1: 6%, 2: 35%, 3: 38%, 4: 14%, 5: 2%
+
+Triggered interviews that find no reserved slot within the window, at peak load
+  site size per wk        slots 1-day window 2-day window 3-day window
+        140    2.2        daily        19.7%         4.7%         1.1%
+        140    2.2  Mon/Wed/Fri        51.2%        26.4%        15.6%
+        140    2.2      Tue/Thu        68.5%        46.7%        35.8%
+        110    1.7        daily        15.4%         2.5%         0.4%
+        110    1.7  Mon/Wed/Fri        49.2%        20.2%        10.1%
+        110    1.7      Tue/Thu        66.1%        42.4%        29.1%
+         70    1.1        daily        10.6%         1.2%         0.1%
+         70    1.1  Mon/Wed/Fri        45.4%        14.0%         5.5%
+         70    1.1      Tue/Thu        65.2%        35.6%        18.9%
+
+k = 0 random audits per participant: 0.79 interviews requested and 0.67 completed per app user
+  site                       app users  per wk rater h/wk sched IE h/wk  cost, 1 rater   3 raters
+  Peru (CITBM)                      98     2.2        1.5          13.2          2,999      5,200
+  Paraguay (UNA)                    98     2.2        1.5          13.2          2,999      5,200
+  Indonesia (UB)                    98     2.2        1.5          13.2          2,999      5,200
+  Bolivia (unifranz)                98     2.2        1.5          13.2          2,999      5,200
+  MGH                               77     1.7        1.2          10.3          2,356      4,086
+  BCM                               77     1.7        1.2          10.3          2,356      4,086
+  Spain (la paz)                    49     1.1        0.7           6.6          1,499      2,600
+  Colombia (unisabana)              49     1.1        0.7           6.6          1,499      2,600
+  Colombia (u rosario)              49     1.1        0.7           6.6          1,499      2,600
+  UK (NHS london)                   49     1.1        0.7           6.6          1,499      2,600
+  UK (Avon and Wilt)                49     1.1        0.7           6.6          1,499      2,600
+  total                                                                         24,205     41,970   (533 completed interviews)
+
+k = 1 random audits per participant: 1.68 interviews requested and 1.43 completed per app user
+  site                       app users  per wk rater h/wk sched IE h/wk  cost, 1 rater   3 raters
+  Peru (CITBM)                      98     4.7        3.1          13.2          6,378     11,060
+  Paraguay (UNA)                    98     4.7        3.1          13.2          6,378     11,060
+  Indonesia (UB)                    98     4.7        3.1          13.2          6,378     11,060
+  Bolivia (unifranz)                98     4.7        3.1          13.2          6,378     11,060
+  MGH                               77     3.7        2.5          10.3          5,012      8,690
+  BCM                               77     3.7        2.5          10.3          5,012      8,690
+  Spain (la paz)                    49     2.4        1.6           6.6          3,189      5,530
+  Colombia (unisabana)              49     2.4        1.6           6.6          3,189      5,530
+  Colombia (u rosario)              49     2.4        1.6           6.6          3,189      5,530
+  UK (NHS london)                   49     2.4        1.6           6.6          3,189      5,530
+  UK (Avon and Wilt)                49     2.4        1.6           6.6          3,189      5,530
+  total                                                                         51,482     89,268   (1,134 completed interviews)
+
+k = 2 random audits per participant: 2.58 interviews requested and 2.19 completed per app user
+  site                       app users  per wk rater h/wk sched IE h/wk  cost, 1 rater   3 raters
+  Peru (CITBM)                      98     7.2        4.8          13.2          9,758     16,920
+  Paraguay (UNA)                    98     7.2        4.8          13.2          9,758     16,920
+  Indonesia (UB)                    98     7.2        4.8          13.2          9,758     16,920
+  Bolivia (unifranz)                98     7.2        4.8          13.2          9,758     16,920
+  MGH                               77     5.7        3.8          10.3          7,667     13,294
+  BCM                               77     5.7        3.8          10.3          7,667     13,294
+  Spain (la paz)                    49     3.6        2.4           6.6          4,879      8,460
+  Colombia (unisabana)              49     3.6        2.4           6.6          4,879      8,460
+  Colombia (u rosario)              49     3.6        2.4           6.6          4,879      8,460
+  UK (NHS london)                   49     3.6        2.4           6.6          4,879      8,460
+  UK (Avon and Wilt)                49     3.6        2.4           6.6          4,879      8,460
+  total                                                                         78,760    136,566   (1,734 completed interviews)
+
+k = 3 random audits per participant: 3.47 interviews requested and 2.95 completed per app user
+  site                       app users  per wk rater h/wk sched IE h/wk  cost, 1 rater   3 raters
+  Peru (CITBM)                      98     9.7        6.5          13.2         13,137     22,780
+  Paraguay (UNA)                    98     9.7        6.5          13.2         13,137     22,780
+  Indonesia (UB)                    98     9.7        6.5          13.2         13,137     22,780
+  Bolivia (unifranz)                98     9.7        6.5          13.2         13,137     22,780
+  MGH                               77     7.6        5.1          10.3         10,322     17,898
+  BCM                               77     7.6        5.1          10.3         10,322     17,898
+  Spain (la paz)                    49     4.9        3.2           6.6          6,569     11,390
+  Colombia (unisabana)              49     4.9        3.2           6.6          6,569     11,390
+  Colombia (u rosario)              49     4.9        3.2           6.6          6,569     11,390
+  UK (NHS london)                   49     4.9        3.2           6.6          6,569     11,390
+  UK (Avon and Wilt)                49     4.9        3.2           6.6          6,569     11,390
+  total                                                                        106,038    183,864   (2,335 completed interviews)
+
+k = 4 random audits per participant: 4.36 interviews requested and 3.71 completed per app user
+  site                       app users  per wk rater h/wk sched IE h/wk  cost, 1 rater   3 raters
+  Peru (CITBM)                      98    12.2        8.1          13.2         16,517     28,640
+  Paraguay (UNA)                    98    12.2        8.1          13.2         16,517     28,640
+  Indonesia (UB)                    98    12.2        8.1          13.2         16,517     28,640
+  Bolivia (unifranz)                98    12.2        8.1          13.2         16,517     28,640
+  MGH                               77     9.6        6.4          10.3         12,978     22,503
+  BCM                               77     9.6        6.4          10.3         12,978     22,503
+  Spain (la paz)                    49     6.1        4.1           6.6          8,259     14,320
+  Colombia (unisabana)              49     6.1        4.1           6.6          8,259     14,320
+  Colombia (u rosario)              49     6.1        4.1           6.6          8,259     14,320
+  UK (NHS london)                   49     6.1        4.1           6.6          8,259     14,320
+  UK (Avon and Wilt)                49     6.1        4.1           6.6          8,259     14,320
+  total                                                                        133,316    231,162   (2,935 completed interviews)
+
+
+$ python aurora_responsiveness_interview_sim.py --reps 200 --recall 7   (load tables omitted: triggers do not depend on recall)
+Triggered interviews: n = 700 app users, 200 reps, HAM-D recall = 7 day(s)
+
+PPV: confirmed when the change since the last HAM-D is >= delta in the flagged
+direction ('same'), or >= 3 points, the MCID, in the flagged direction ('>=3').
+worse = share of triggers flagging deterioration.
+
+delta delay | fired/pt done/pt worse | true PPV: same, at trigger  same  >=3
+----------------------------------------------------------------------------
+    3     0 |     2.23    1.89  0.35 |                    0.235 0.235 0.235
+    3     1 |     2.12    1.80  0.35 |                    0.227 0.276 0.276
+    3     2 |     2.12    1.79  0.35 |                    0.227 0.309 0.309
+    3     3 |     1.99    1.68  0.35 |                    0.221 0.328 0.328
+    3     7 |     1.70    1.43  0.36 |                    0.208 0.314 0.314
+    4     0 |     1.43    1.22  0.31 |                    0.183 0.183 0.349
+    4     1 |     1.34    1.13  0.31 |                    0.175 0.216 0.393
+    4     2 |     1.34    1.13  0.31 |                    0.175 0.247 0.426
+    4     3 |     1.23    1.04  0.32 |                    0.167 0.262 0.438
+    4     7 |     1.00    0.83  0.33 |                    0.148 0.255 0.399
+    5     0 |     0.87    0.73  0.28 |                    0.148 0.148 0.474
+    5     1 |     0.79    0.67  0.28 |                    0.139 0.172 0.515
+    5     2 |     0.79    0.67  0.28 |                    0.138 0.200 0.544
+    5     3 |     0.71    0.60  0.29 |                    0.128 0.212 0.549
+    5     7 |     0.55    0.46  0.29 |                    0.106 0.212 0.487
+    7     0 |     0.28    0.24  0.21 |                    0.093 0.093 0.698
+    7     1 |     0.25    0.21  0.21 |                    0.082 0.106 0.724
+    7     2 |     0.25    0.21  0.21 |                    0.082 0.129 0.747
+    7     3 |     0.21    0.18  0.22 |                    0.072 0.133 0.743
+    7     7 |     0.15    0.12  0.23 |                    0.051 0.132 0.658
+
+Observed PPV, with rater error on both HAM-Ds (mean, 95% half-width across trials)
+delta delay | SEM 2.5: same  +/-    >=3  +/- | SEM 1.5: same  +/-    >=3  +/-
+-----------------------------------------------------------------------------
+    3     0 |          0.381 0.028  0.381 0.028 |          0.329 0.028  0.329 0.028
+    3     1 |          0.398 0.025  0.398 0.025 |          0.355 0.024  0.355 0.024
+    3     2 |          0.415 0.027  0.415 0.027 |          0.378 0.026  0.378 0.026
+    3     3 |          0.421 0.029  0.421 0.029 |          0.388 0.029  0.388 0.029
+    3     7 |          0.397 0.031  0.397 0.031 |          0.363 0.030  0.363 0.030
+    4     0 |          0.339 0.031  0.434 0.033 |          0.277 0.030  0.406 0.033
+    4     1 |          0.360 0.032  0.455 0.032 |          0.303 0.030  0.434 0.032
+    4     2 |          0.371 0.033  0.468 0.034 |          0.322 0.034  0.453 0.035
+    4     3 |          0.379 0.039  0.475 0.039 |          0.332 0.036  0.463 0.038
+    4     7 |          0.358 0.040  0.449 0.040 |          0.312 0.038  0.428 0.042
+    5     0 |          0.304 0.039  0.495 0.043 |          0.237 0.035  0.489 0.041
+    5     1 |          0.322 0.043  0.511 0.044 |          0.259 0.041  0.514 0.044
+    5     2 |          0.337 0.046  0.529 0.045 |          0.279 0.044  0.536 0.046
+    5     3 |          0.342 0.042  0.533 0.047 |          0.287 0.042  0.541 0.050
+    5     7 |          0.319 0.054  0.495 0.054 |          0.267 0.052  0.494 0.053
+    7     0 |          0.242 0.060  0.607 0.075 |          0.168 0.060  0.644 0.076
+    7     1 |          0.254 0.072  0.621 0.081 |          0.186 0.061  0.667 0.076
+    7     2 |          0.272 0.074  0.640 0.077 |          0.202 0.065  0.685 0.075
+    7     3 |          0.273 0.078  0.641 0.085 |          0.206 0.069  0.684 0.080
+    7     7 |          0.255 0.088  0.596 0.109 |          0.198 0.085  0.624 0.107
+
+Random audits, k = 2, same draws (n = 700)
+delta | requested/pt done/pt | miss true obs2.5 obs1.5 | sens true obs2.5 obs1.5
+--------------------------------------------------------------------------------
+    3 |         1.79    1.52 |     0.108  0.453  0.287 |     0.570  0.299  0.367
+    4 |         1.79    1.52 |     0.049  0.323  0.167 |     0.545  0.197  0.290
+    5 |         1.79    1.52 |     0.023  0.222  0.093 |     0.526  0.138  0.246
+    7 |         1.79    1.52 |     0.005  0.095  0.026 |     0.468  0.071  0.182
+

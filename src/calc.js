@@ -15,6 +15,22 @@ import {
   allocateRoster,
   cvBetween,
 } from "./sites.js";
+import {
+  INTERVIEW_PRESETS,
+  HAMD_MODELS,
+  SCORING,
+  FOLLOW_UP_DAYS,
+  AUDIT_DAYS,
+  TRIGGER_CAP,
+  RATER_MINUTES,
+  EXTRA_RATER_MINUTES,
+  PATIENT_MINUTES,
+  RATER_RATE,
+  PATIENT_RATE,
+  BUDGETED_ASSESSMENT_HOURS,
+  SCHEDULED_IE_MINUTES,
+  SITE_COSTING,
+} from "./responsiveness.js";
 
 // allocateClusters lives in sites.js (it is the allocation primitive both modules need),
 // re-exported here so existing importers and tests are unaffected.
@@ -875,6 +891,160 @@ export function createModel(s) {
     };
   }
 
+  // --- Responsiveness interviews (Aim 2.2) ---------------------------------
+
+  // Extra HAM-D interviews in the arms that use AURORA, since the algorithm does not run
+  // in TAU: random audits, which estimate how often the algorithm misses a change, and
+  // interviews triggered when it reports one, which estimate PPV. Counts, precision, load
+  // and cost are computed here. How often the algorithm triggers, and how often it is
+  // right, come from the simulation presets in responsiveness.js.
+  function responsiveness(totalN) {
+    const alloc = allocation(totalN);
+    const idx = iccArmKeys.map((k) => armIndex[k]);
+    const preset = INTERVIEW_PRESETS[s.respTrigger];
+    const scoring = SCORING[s.respScoring];
+
+    // Exponential dropout reaching controlAttrition at day 112.
+    const survive = (day) =>
+      Math.pow(1 - s.controlAttrition, day / FOLLOW_UP_DAYS);
+    // An audit is requested only if the participant is still enrolled on its day. Audit
+    // days are uniform over the eligible days, so this is their mean survival.
+    const auditOnStudy =
+      AUDIT_DAYS.reduce((acc, d) => acc + survive(d), 0) / AUDIT_DAYS.length;
+    // Triggers come early in follow-up. Survival to their mean day reproduces the
+    // simulation's request rates within 0.005 at its 20% attrition.
+    const triggerOnStudy = survive(preset.meanTriggerDay);
+
+    // Per app user.
+    const auditsRequested = s.respAudits * auditOnStudy;
+    const triggersRequested = preset.triggerRequests * triggerOnStudy;
+    const requested = auditsRequested + triggersRequested;
+    const auditsCompleted = auditsRequested * s.respCompletion;
+    const triggersCompleted = triggersRequested * s.respCompletion;
+    const completed = auditsCompleted + triggersCompleted;
+
+    const nAppUsers = idx.reduce((acc, i) => acc + alloc.randomized[i], 0);
+    const nPatients = alloc.randomized.reduce((acc, v) => acc + v, 0);
+
+    // An estimation objective, so no arm-level multiplicity; alpha and the small-sample t
+    // apply as they do in the ICC and DIF panels.
+    let crit = zUnadjusted;
+    if (s.smallSampleT) {
+      const df = dfFor(totalN);
+      if (df > 2) crit = tQuantile(normCdf(crit), df);
+    }
+
+    // Binomial precision at the observed (as-scored) rate, taking whichever HAM-D model
+    // gives the wider interval. Repeated audits on one person are correlated, but the
+    // simulation's intervals match this within 0.002 at 1, 2 and 4 audits per person.
+    const pq = (key) =>
+      Math.max(
+        ...HAMD_MODELS.map((m) => {
+          const p = preset[m][key][s.respScoring];
+          return p * (1 - p);
+        }),
+      );
+    const halfWidth = (n, key) =>
+      n > 0 ? crit * Math.sqrt(pq(key) / n) : Infinity;
+    const nAudits = nAppUsers * auditsCompleted;
+    const nNegative = nAudits * preset.negativeShare;
+    // The smallest fairness subgroup, as set in the DIF panel (Aim 2.3).
+    const nNegativeSubgroup = nNegative * s.difSubgroupShare;
+    const nTriggered = nAppUsers * triggersCompleted;
+
+    // Rater hours per app user: every request takes the interviewing rater's time; each
+    // extra rater scores the recordings of the completed ones.
+    const raterHoursPerUser =
+      (requested * RATER_MINUTES +
+        completed * (scoring.raters - 1) * EXTRA_RATER_MINUTES) /
+      60;
+    const costPerInterview =
+      (RATER_MINUTES / 60) * RATER_RATE +
+      (PATIENT_MINUTES / 60) * PATIENT_RATE +
+      (scoring.raters - 1) * (EXTRA_RATER_MINUTES / 60) * RATER_RATE;
+
+    // Peak weekly load with even enrollment over respEnrollWeeks: at the plateau every
+    // week's cohort contributes all its interviews. Enrolling faster than 16 weeks puts
+    // everyone in follow-up at once, so the load spreads over the 16 weeks instead.
+    const spreadWeeks = Math.max(s.respEnrollWeeks, FOLLOW_UP_DAYS / 7);
+    const scheduledHoursPerPatient =
+      (SCHEDULED_IE_MINUTES[0] + SCHEDULED_IE_MINUTES[1]) / 2 / 60;
+
+    const sites = alloc.sites.map((site) => {
+      const appUsers = idx.reduce((acc, i) => acc + site.randomized[i], 0);
+      const patients = site.randomized.reduce((acc, v) => acc + v, 0);
+      const costing = SITE_COSTING[site.name];
+      return {
+        name: site.name,
+        appUsers,
+        interviews: appUsers * completed,
+        perWeek: (appUsers * requested) / spreadWeeks,
+        raterHoursPerWeek: (appUsers * raterHoursPerUser) / spreadWeeks,
+        scheduledHoursPerWeek:
+          (patients * scheduledHoursPerPatient) / spreadWeeks,
+        costed: Boolean(costing),
+        staff: Boolean(costing && costing.staff),
+        cost:
+          appUsers *
+          completed *
+          costPerInterview *
+          (costing ? costing.factor : 1),
+      };
+    });
+    const totalCost = sites.reduce((acc, x) => acc + x.cost, 0);
+    const staffCost = sites
+      .filter((x) => x.staff)
+      .reduce((acc, x) => acc + x.cost, 0);
+    const largest = sites.reduce((a, b) => (b.perWeek > a.perWeek ? b : a));
+
+    // Budget check: the assessment hours paid per patient, less the scheduled
+    // interviews' 140-255 minutes, spread over the app users who need these interviews.
+    const [marginHigh, marginLow] = SCHEDULED_IE_MINUTES.map(
+      (m) => ((BUDGETED_ASSESSMENT_HOURS - m / 60) * nPatients) / nAppUsers,
+    );
+    const budgetFit =
+      raterHoursPerUser <= marginLow
+        ? "fits"
+        : raterHoursPerUser <= marginHigh
+          ? "tight"
+          : "exceeds";
+
+    return {
+      armKeys: iccArmKeys,
+      threshold: s.respTrigger,
+      preset,
+      scoring,
+      auditOnStudy,
+      triggerOnStudy,
+      auditsRequested,
+      triggersRequested,
+      requested,
+      auditsCompleted,
+      triggersCompleted,
+      completed,
+      maxExtra: s.respAudits + TRIGGER_CAP,
+      nAppUsers,
+      nPatients,
+      nAudits,
+      nNegative,
+      nNegativeSubgroup,
+      nTriggered,
+      nInterviews: nAppUsers * completed,
+      crit,
+      missHalfWidth: halfWidth(nNegative, "missObserved"),
+      missHalfWidthSubgroup: halfWidth(nNegativeSubgroup, "missObserved"),
+      ppvHalfWidth: halfWidth(nTriggered, "ppvObserved"),
+      raterHoursPerUser,
+      costPerInterview,
+      sites,
+      totalCost,
+      staffCost,
+      largest,
+      budgetMargin: [marginLow, marginHigh],
+      budgetFit,
+    };
+  }
+
   // --- Within-clinician effect spillover substudy ---------------------------
 
   // A THIRD clinician type: ROM-trained, dashboard in hand, but only some of their
@@ -1053,6 +1223,7 @@ export function createModel(s) {
     contrasts,
     allocation,
     dif,
+    responsiveness,
     spillover,
     hamd,
     hamdPower,

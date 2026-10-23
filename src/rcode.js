@@ -7,6 +7,19 @@
 // real cross-check rather than a tautology.
 
 import { rosterFromSettings } from "./sites.js";
+import {
+  INTERVIEW_PRESETS,
+  SCORING,
+  SITE_COSTING,
+  INTERVIEW_PRESETS_SOURCE,
+  RATER_MINUTES,
+  EXTRA_RATER_MINUTES,
+  PATIENT_MINUTES,
+  RATER_RATE,
+  PATIENT_RATE,
+  BUDGETED_ASSESSMENT_HOURS,
+  BUDGET_SOURCE,
+} from "./responsiveness.js";
 
 export function buildRCode(s) {
   const threeArm = s.designArms === 3;
@@ -39,6 +52,16 @@ export function buildRCode(s) {
       ? "c(1, 2, 2)"
       : "c(1, 2, 3)"
     : "c(1, 2)";
+  // Aim 2.2: the algorithm's behaviour at the chosen threshold is simulation data, so it
+  // is written out as constants; everything computed from it is recomputed in R.
+  const preset = INTERVIEW_PRESETS[s.respTrigger];
+  const sc = s.respScoring;
+  const siteCostFactor = roster
+    .map((x) => (SITE_COSTING[x.name] ? SITE_COSTING[x.name].factor : 1))
+    .join(", ");
+  const siteStaff = roster
+    .map((x) => (SITE_COSTING[x.name]?.staff ? "TRUE" : "FALSE"))
+    .join(", ");
 
   return `# AURORA Trial Power Calculations
 # Reproduces the minimum detectable effect (MDE) calculations from the calculator.
@@ -102,6 +125,28 @@ dif_item_info      <- ${s.difItemInfo}   # item information at the targeted abil
 # Spillover substudy: share of clinicians running a MIXED panel (some patients on the
 # dashboard, some not). 0 disables it. Three-arm only.
 mixed_share        <- ${s.mixedShare}
+
+# Responsiveness interviews (Aim 2.2): random audits and triggered HAM-Ds in the AURORA arms
+resp_audits       <- ${s.respAudits}       # random audits per participant
+resp_trigger      <- ${s.respTrigger}       # trigger threshold, HAM-D points
+resp_raters       <- ${SCORING[sc].raters}       # raters scoring each recording
+resp_completion   <- ${s.respCompletion}
+resp_enroll_weeks <- ${s.respEnrollWeeks}
+# How the algorithm behaves at this threshold, from the simulation, not computed here:
+# ${INTERVIEW_PRESETS_SOURCE}
+trigger_requests <- ${preset.triggerRequests}   # per participant enrolled all 16 weeks
+mean_trigger_day <- ${preset.meanTriggerDay}
+negative_share   <- ${preset.negativeShare}   # share of audits the algorithm scores negative
+# Observed miss rate and PPV as scored, under the same-day and past-week HAM-D models
+miss_observed    <- c(${preset.sameDay.missObserved[sc]}, ${preset.pastWeek.missObserved[sc]})
+ppv_observed     <- c(${preset.sameDay.ppvObserved[sc]}, ${preset.pastWeek.ppvObserved[sc]})
+# Budget figures: ${BUDGET_SOURCE}
+rater_rate       <- ${RATER_RATE}   # per hour, assessment and admin time
+patient_rate     <- ${PATIENT_RATE}   # per hour, participant time
+budget_hours     <- ${BUDGETED_ASSESSMENT_HOURS}   # assessment hours paid per patient
+# Per-site cost relative to US rates; site_staff marks sites costed as staff time
+site_cost_factor <- c(${siteCostFactor})
+site_staff       <- c(${siteStaff})
 
 contrasts <- ${contrasts}
 
@@ -484,6 +529,78 @@ calc_dif <- function(total_n) {
 }
 
 # ============================================
+# Responsiveness interviews (Aim 2.2)
+# ============================================
+# Extra HAM-Ds in the arms that use AURORA: random audits, which estimate how often the
+# algorithm misses a change, and interviews it triggers, which estimate PPV. Counts,
+# precision, load and cost are closed-form; the algorithm's behaviour is the data above.
+
+calc_responsiveness <- function(total_n) {
+  alloc <- allocation(total_n)
+
+  # Exponential dropout reaching control_attrition at day 112. Audits fall on days 7-111,
+  # never within 3 days of a scheduled HAM-D, uniformly, so the share requested while the
+  # participant is enrolled is their mean survival. Triggers come early in follow-up and
+  # are discounted by survival to their mean day.
+  survive    <- function(day) (1 - control_attrition)^(day / 112)
+  sched      <- c(0, 28, 56, 84, 112)
+  audit_days <- Filter(function(d) all(abs(sched - d) > 3), 7:111)
+  audit_on_study   <- mean(survive(audit_days))
+  trigger_on_study <- survive(mean_trigger_day)
+
+  # Per app user
+  audits_req    <- resp_audits * audit_on_study
+  triggers_req  <- trigger_requests * trigger_on_study
+  requested     <- audits_req + triggers_req
+  completed     <- requested * resp_completion
+
+  n_app <- sum(alloc$randomized[icc_arms])
+  n_all <- sum(alloc$randomized)
+
+  # An estimation objective: no multiplicity, but alpha and the small-sample t apply.
+  z <- z_unadjusted
+  if (small_sample_t) {
+    df <- round(total_n / patients_per_cluster) - n_arms
+    if (df > 2) z <- t_quantile(pnorm(z), df)
+  }
+  # Binomial at the observed rate, under whichever HAM-D model gives the wider interval.
+  half <- function(n, p) if (n > 0) z * sqrt(max(p * (1 - p)) / n) else Inf
+  n_negative  <- n_app * audits_req * resp_completion * negative_share
+  n_triggered <- n_app * triggers_req * resp_completion
+
+  # Rater hours per app user: every request takes ${RATER_MINUTES} minutes of the interviewer's time,
+  # and each extra rater spends ${EXTRA_RATER_MINUTES} minutes scoring a completed interview's recording.
+  rater_hours <- (requested * ${RATER_MINUTES} + completed * (resp_raters - 1) * ${EXTRA_RATER_MINUTES}) / 60
+  cost_per    <- ${RATER_MINUTES} / 60 * rater_rate + ${PATIENT_MINUTES} / 60 * patient_rate +
+                 (resp_raters - 1) * ${EXTRA_RATER_MINUTES} / 60 * rater_rate
+
+  # Peak weekly load with even enrollment: enrolling faster than 16 weeks puts everyone in
+  # follow-up at once, so the load spreads over the 16 weeks instead.
+  spread   <- max(resp_enroll_weeks, 112 / 7)
+  site_app <- sapply(alloc$per_site,
+                     function(gc) sum((gc[cluster_group] * alloc$arm_cluster_size)[icc_arms]))
+  site_all <- sapply(alloc$per_site,
+                     function(gc) sum(gc[cluster_group] * alloc$arm_cluster_size))
+  site_cost <- site_app * completed * cost_per * site_cost_factor
+
+  list(n_app = n_app, n_all = n_all,
+       requested = requested, completed = completed, max_extra = resp_audits + 4,
+       n_interviews = n_app * completed,
+       n_negative = n_negative, n_triggered = n_triggered,
+       miss_half = half(n_negative, miss_observed),
+       miss_half_sub = half(n_negative * dif_subgroup_share, miss_observed),
+       ppv_half = half(n_triggered, ppv_observed),
+       rater_hours = rater_hours, cost_per = cost_per,
+       per_week = site_app * requested / spread,
+       rater_hours_week = site_app * rater_hours / spread,
+       scheduled_hours_week = site_all * mean(c(140, 255)) / 60 / spread,
+       total_cost = sum(site_cost), staff_cost = sum(site_cost[site_staff]),
+       # The assessment hours paid per patient, less the scheduled
+       # interviews' 140-255 minutes, spread over the app users.
+       margin = (budget_hours - c(255, 140) / 60) * n_all / n_app)
+}
+
+# ============================================
 # Results
 # ============================================
 
@@ -625,6 +742,25 @@ cat(paste0("  DIF precision: +/-", round(dif$ci_half_width, 3), " logits (",
            ci_level, "% CI)\\n"))
 cat(paste0("  Detectable:    ", round(dif$mde, 3), " logits at ", round(power * 100), "% power\\n"))
 cat(paste0("  Power at ", dif_target_logits, ": ", round(dif$power * 100), "%\\n"))
+
+resp <- calc_responsiveness(total_n)
+busiest <- which.max(resp$per_week)
+cat(paste0("\\nResponsiveness interviews (Aim 2.2): ", resp_audits, " audits, ",
+           resp_trigger, "-point trigger, ", resp_raters, " rater(s) per recording\\n"))
+cat(paste0("  App users:     ", round(resp$n_app), " of ", round(resp$n_all), "\\n"))
+cat(paste0("  Per app user:  ", round(resp$requested, 3), " requested (up to ",
+           resp$max_extra, "), ", round(resp$completed, 3), " completed\\n"))
+cat(paste0("  Miss rate:     +/-", round(resp$miss_half, 4), " (", round(resp$n_negative),
+           " negative audits), smallest subgroup +/-", round(resp$miss_half_sub, 4), "\\n"))
+cat(paste0("  PPV:           +/-", round(resp$ppv_half, 4), " (", round(resp$n_triggered),
+           " triggered interviews)\\n"))
+cat(paste0("  Cost:          ", round(resp$total_cost), " (", round(resp$staff_cost),
+           " of it staff time), ", round(resp$cost_per, 2), " per interview\\n"))
+cat(paste0("  Busiest site:  ", round(resp$per_week[busiest], 2), " interviews/week, ",
+           round(resp$rater_hours_week[busiest], 2), " rater h/week vs ",
+           round(resp$scheduled_hours_week[busiest], 2), " scheduled\\n"))
+cat(paste0("  Rater hours:   ", round(resp$rater_hours, 3), " per app user vs budget margin ",
+           round(resp$margin[1], 2), "-", round(resp$margin[2], 2), "\\n"))
 
 spill <- calc_spillover(total_n)
 if (!is.null(spill) && spill$M > 0) {

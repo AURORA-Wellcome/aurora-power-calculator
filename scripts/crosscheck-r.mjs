@@ -43,6 +43,17 @@ const d = m.dif(n);
 lines.push(
   `DIF: users=${d.nUsers} focal=${d.nFocal} ref=${d.nReference} adequate=${d.adequate ? "Yes" : "No"} needN=${d.nRequired} DE=${d.designEffect.toFixed(4)} CI=+/-${d.ciHalfWidth.toFixed(3)} mde=${d.mde.toFixed(3)} power=${Math.round(d.power * 100)}%`,
 );
+const rs = m.responsiveness(n);
+const busiest = rs.sites.reduce((a, b) => (b.perWeek > a.perWeek ? b : a));
+lines.push(
+  `responsiveness: app ${Math.round(rs.nAppUsers)} of ${Math.round(rs.nPatients)}, requested ${rs.requested.toFixed(3)} (up to ${rs.maxExtra}), completed ${rs.completed.toFixed(3)}`,
+);
+lines.push(
+  `  miss +/-${rs.missHalfWidth.toFixed(4)} (${Math.round(rs.nNegative)} negative), subgroup +/-${rs.missHalfWidthSubgroup.toFixed(4)}, PPV +/-${rs.ppvHalfWidth.toFixed(4)} (${Math.round(rs.nTriggered)} triggered)`,
+);
+lines.push(
+  `  cost ${Math.round(rs.totalCost)} (staff ${Math.round(rs.staffCost)}), ${rs.costPerInterview.toFixed(2)} per interview; busiest ${busiest.perWeek.toFixed(2)}/wk, ${busiest.raterHoursPerWeek.toFixed(2)} rater h vs ${busiest.scheduledHoursPerWeek.toFixed(2)} scheduled; rater h/user ${rs.raterHoursPerUser.toFixed(3)} vs margin ${rs.budgetMargin[0].toFixed(2)}-${rs.budgetMargin[1].toFixed(2)}`,
+);
 // The spillover substudy only produces a comparison when it is switched on, and the
 // generated R suppresses its block the same way, so both sides stay quiet at the
 // shipped default of mixedShare = 0.
