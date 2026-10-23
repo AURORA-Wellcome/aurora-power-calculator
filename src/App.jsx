@@ -35,7 +35,11 @@ import {
   syncLocation,
 } from "./urlState";
 
-const STORAGE_KEY = "aurora-power-calculator-settings";
+// Renamed when the defaults moved to the approved three-arm design (2026-10-23), so
+// browsers that saved settings under the two-arm defaults open on the new design.
+// Settings saved under older keys are discarded; see loadSettings.
+const STORAGE_KEY = "aurora-power-calculator-settings-v2";
+const RETIRED_STORAGE_KEYS = ["aurora-power-calculator-settings"];
 
 // Categorical series colors, validated for colorblind separation against a white chart
 // surface (all-pairs). Color follows the contrast, not the outcome, so "blue = A vs C"
@@ -220,6 +224,7 @@ function loadSettings() {
   if (token) return decodeSettings(token);
 
   try {
+    RETIRED_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       // Spreading over defaults means a payload saved before a setting existed picks
