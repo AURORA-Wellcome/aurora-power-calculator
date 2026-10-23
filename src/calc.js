@@ -437,7 +437,8 @@ export function createModel(s) {
   let measurementVarianceMultiplier = 1.0;
   if (useRasch) {
     const sumScoreError = 1 - s.sumScoreReliability;
-    const raschError = 1 - s.raschReliability;
+    const raschError =
+      1 - Math.min(s.sumScoreReliability + s.raschReliabilityGain, 0.999);
     const errorReduction = (sumScoreError - raschError) / sumScoreError;
     measurementVarianceMultiplier *= 1 - errorReduction * sumScoreError;
   }

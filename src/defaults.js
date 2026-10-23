@@ -62,16 +62,17 @@ export const defaults = {
 
   // Measurement model. MFRM is the planned analysis. Its default gain is the removal of
   // rater severity only, cutting HAM-D error variance 7% and the MDE ~3.6% against a sum
-  // score. Rasch scoring is credited with no reliability gain: with complete item data the
-  // raw sum score is a sufficient statistic for the Rasch person measure, so rescoring
-  // linearizes the scale but adds little information. The 7% is a placeholder until the
+  // score. Rasch scoring's reliability is the sum score's plus raschReliabilityGain, which
+  // defaults to 0: with complete item data the raw sum score is a sufficient statistic for
+  // the Rasch person measure, so rescoring linearizes the scale but adds little
+  // information. A gain g removes exactly g of the HAM-D variance. The 7% is a placeholder until the
   // raters' calibration recordings estimate it, and MFRM can only remove it if a linked
   // rating design (the shared calibration set) separates rater effects. It removes
   // scoring severity, not differences in how interviewers elicit answers. The charts keep
   // a sum-score baseline line so the assumption stays visible.
   measurementModel: "mfrm",
   sumScoreReliability: 0.86,
-  raschReliability: 0.86,
+  raschReliabilityGain: 0,
   raterVarianceProp: 0.07,
 
   // Spillover substudy: share of clinicians running a MIXED panel (some patients on the

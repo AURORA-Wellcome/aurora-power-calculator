@@ -285,7 +285,7 @@ const baseSettings = {
   smallSampleT: false,
   measurementModel: "sum",
   sumScoreReliability: 0.86,
-  raschReliability: 0.91,
+  raschReliabilityGain: 0.05,
   raterVarianceProp: 0.07,
   targetIcc: 0.75,
   expectedIcc: 0.8,
@@ -887,6 +887,24 @@ section("7. Shipped defaults");
       dm.hamd(1000, c).baselineMDE > dm.hamd(1000, c).mde,
       `${dm.hamd(1000, c).baselineMDE.toFixed(3)} vs ${dm.hamd(1000, c).mde.toFixed(3)}`,
     );
+    // Rasch scoring is a gain over the sum score: none by default, and a gain g
+    // removes exactly g of the variance.
+    const rasch = (g) =>
+      createModel({ ...defaults, measurementModel: "rasch", raschReliabilityGain: g });
+    close(
+      "Rasch at the default gain matches the sum score",
+      rasch(0).hamd(1000, c).mde,
+      sum.hamd(1000, c).mde,
+      1e-12,
+    );
+    for (const g of [0.02, 0.05]) {
+      close(
+        `Rasch gain ${g} removes ${g * 100}% of the variance`,
+        rasch(g).measurementVarianceMultiplier,
+        1 - g,
+        1e-12,
+      );
+    }
   }
   ok(
     "default randomization is hybrid",
@@ -2657,6 +2675,54 @@ section("9. URL state codec");
       back.nFollowups === defaults.nFollowups,
       String(back.nFollowups),
     );
+  }
+
+  // Version 1 stored an absolute Rasch reliability where version 2 stores the gain over
+  // the sum score. An old link must keep its numbers.
+  {
+    const slot = FIELD_ORDER.indexOf("raschReliabilityGain");
+    const v1 = (rel) => {
+      const parts = encodeSettings({
+        ...defaults,
+        measurementModel: "rasch",
+        sumScoreReliability: 0.86,
+      }).split("_");
+      parts[0] = "1";
+      parts[slot + 1] = rel;
+      return parts.join("_");
+    };
+    ok(
+      "links are version 2",
+      encodeSettings(defaults).startsWith("2_"),
+    );
+    const old = decodeSettings(v1("0.91"));
+    close(
+      "a version-1 link's 0.91 Rasch reliability becomes a +0.05 gain",
+      old.raschReliabilityGain,
+      0.05,
+      1e-12,
+    );
+    ok(
+      "the converted link keeps its 5% Rasch variance reduction",
+      Math.abs(createModel(old).measurementVarianceMultiplier - 0.95) < 1e-12,
+      String(createModel(old).measurementVarianceMultiplier),
+    );
+    close(
+      "a version-1 Rasch reliability below the sum score converts to no gain",
+      decodeSettings(v1("0.80")).raschReliabilityGain,
+      0,
+      0,
+    );
+    close(
+      "an invalid version-1 Rasch reliability falls back to the default gain",
+      decodeSettings(v1("7")).raschReliabilityGain,
+      defaults.raschReliabilityGain,
+      0,
+    );
+    const back = decodeSettings(
+      encodeSettings({ ...defaults, raschReliabilityGain: 0.03 }),
+    );
+    close("a version-2 gain round-trips", back.raschReliabilityGain, 0.03, 0);
   }
 }
 

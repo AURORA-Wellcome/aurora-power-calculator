@@ -144,6 +144,13 @@ const CheckIcon = () => (
 // (spillover, in two-arm mode) leaves a gap instead of renumbering the rest. Like the
 // anchor ids, treat them as a citation format: give a new panel a new number, or a
 // sub-number such as "6a", rather than shifting existing ones.
+// Change in HAM-D error variance from the measurement model, as a signed label, or null
+// when it rounds to zero (e.g. Rasch scoring at the default, which credits no gain).
+function varianceChangeLabel(reduction) {
+  if (reduction == null || Math.abs(reduction) < 0.05) return null;
+  return `${reduction > 0 ? "\u2212" : "+"}${Math.abs(reduction).toFixed(1)}%`;
+}
+
 const SECTION_NUMBERS = {
   "design-summary": "1",
   "trial-design": "2",
@@ -269,7 +276,7 @@ export default function PowerCurves() {
     survivalEfficiency,
     measurementModel,
     sumScoreReliability,
-    raschReliability,
+    raschReliabilityGain,
     raterVarianceProp,
     targetIcc,
     expectedIcc,
@@ -776,9 +783,9 @@ export default function PowerCurves() {
                     ? "Rasch Partial Credit"
                     : "Sum score"}
               </div>
-              {(useRasch || useMFRM) && (
+              {varianceChangeLabel(currentHamd.varianceReduction) && (
                 <div className="text-xs text-green-700">
-                  -{currentHamd.varianceReduction?.toFixed(1)}% variance
+                  {varianceChangeLabel(currentHamd.varianceReduction)} variance
                 </div>
               )}
             </div>
@@ -1459,81 +1466,102 @@ export default function PowerCurves() {
               </div>
             ))}
             <div className="text-xs md:text-sm text-gray-600">
-              {(useRasch || useMFRM) && (
+              {varianceChangeLabel(currentHamd.varianceReduction) && (
                 <span className="text-green-700 font-medium">
-                  -{currentHamd.varianceReduction?.toFixed(1)}% var → MDE:{" "}
-                  {currentHamd.mde.toFixed(2)} pts
+                  {varianceChangeLabel(currentHamd.varianceReduction)} var →
+                  MDE: {currentHamd.mde.toFixed(2)} pts
                 </span>
               )}
             </div>
           </div>
 
-          {(useRasch || useMFRM) && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 pt-3 border-t">
-              <div>
-                <label className={labelCls} htmlFor="s-sumScoreReliability">
-                  Sum reliability: {sumScoreReliability}
-                </label>
-                <input
-                  type="range"
-                  id="s-sumScoreReliability"
-                  min="0.80"
-                  max="0.92"
-                  step="0.01"
-                  value={sumScoreReliability}
-                  onChange={(e) =>
-                    set("sumScoreReliability")(parseFloat(e.target.value))
-                  }
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className={labelCls} htmlFor="s-raschReliability">
-                  Rasch rel: {raschReliability}
-                </label>
-                <input
-                  type="range"
-                  id="s-raschReliability"
-                  min="0.85"
-                  max="0.95"
-                  step="0.01"
-                  value={raschReliability}
-                  onChange={(e) =>
-                    set("raschReliability")(parseFloat(e.target.value))
-                  }
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className={labelCls} htmlFor="s-raterVarianceProp">
-                  Rater var: {(raterVarianceProp * 100).toFixed(0)}%
-                </label>
-                <input
-                  type="range"
-                  id="s-raterVarianceProp"
-                  min="0.03"
-                  max="0.15"
-                  step="0.01"
-                  value={raterVarianceProp}
-                  onChange={(e) =>
-                    set("raterVarianceProp")(parseFloat(e.target.value))
-                  }
-                  className="w-full"
-                  disabled={!useMFRM}
-                />
-              </div>
-              <div className="text-xs text-gray-600 items-center hidden md:flex">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 pt-3 border-t">
+            <div>
+              <label
+                className={labelCls}
+                htmlFor="s-sumScoreReliability"
+                title="The sum score's reliability. The sum-score MDE already reflects measurement error through the HAM-D SD, so this sets the baseline the Rasch models are compared against."
+              >
+                Sum reliability: {sumScoreReliability}
+              </label>
+              <input
+                type="range"
+                id="s-sumScoreReliability"
+                min="0.80"
+                max="0.92"
+                step="0.01"
+                value={sumScoreReliability}
+                onChange={(e) =>
+                  set("sumScoreReliability")(parseFloat(e.target.value))
+                }
+                className="w-full"
+              />
+            </div>
+            {(useRasch || useMFRM) && (
+              <>
                 <div>
+                  <label
+                    className={labelCls}
+                    htmlFor="s-raschReliabilityGain"
+                    title="Reliability Rasch scoring adds over the sum score. 0 by default: with complete item data the sum score is a sufficient statistic for the Rasch measure, so rescoring adds little information. A gain of g removes g of the HAM-D variance."
+                  >
+                    Rasch gain: +{raschReliabilityGain.toFixed(2)} (rel{" "}
+                    {Math.min(
+                      sumScoreReliability + raschReliabilityGain,
+                      0.999,
+                    ).toFixed(2)}
+                    )
+                  </label>
+                  <input
+                    type="range"
+                    id="s-raschReliabilityGain"
+                    min="0"
+                    max="0.1"
+                    step="0.01"
+                    value={raschReliabilityGain}
+                    onChange={(e) =>
+                      set("raschReliabilityGain")(parseFloat(e.target.value))
+                    }
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls} htmlFor="s-raterVarianceProp">
+                    Rater var: {(raterVarianceProp * 100).toFixed(0)}%
+                  </label>
+                  <input
+                    type="range"
+                    id="s-raterVarianceProp"
+                    min="0.03"
+                    max="0.15"
+                    step="0.01"
+                    value={raterVarianceProp}
+                    onChange={(e) =>
+                      set("raterVarianceProp")(parseFloat(e.target.value))
+                    }
+                    className="w-full"
+                    disabled={!useMFRM}
+                  />
+                </div>
+                <div className="text-xs text-gray-600 items-center hidden md:flex">
                   <div>
-                    <strong>Rasch Partial Credit:</strong> Interval scoring
-                  </div>
-                  <div>
-                    <strong>Multi-Facet Rasch:</strong> Removes rater effects
+                    <div>
+                      <strong>Rasch Partial Credit:</strong> Interval scoring
+                    </div>
+                    <div>
+                      <strong>Multi-Facet Rasch:</strong> Removes rater effects
+                    </div>
                   </div>
                 </div>
+              </>
+            )}
+            {!useRasch && !useMFRM && (
+              <div className="text-xs text-gray-600 flex items-center md:col-span-3">
+                The baseline the Rasch models are compared against; it does not
+                change the sum-score MDE.
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </section>
 
         {/* ICC Validation Controls */}
@@ -1783,8 +1811,8 @@ export default function PowerCurves() {
               </div>
               <div className="text-gray-600 text-xs">
                 ${Math.round(currentResp.staffCost).toLocaleString()} of it
-                staff time; $
-                {currentResp.costPerInterview.toFixed(2)} per interview
+                staff time; ${currentResp.costPerInterview.toFixed(2)} per
+                interview
               </div>
             </div>
           </div>
@@ -1850,8 +1878,7 @@ export default function PowerCurves() {
             This design needs {currentResp.raterHoursPerUser.toFixed(1)} rater
             hours per app user. The budget pays {BUDGETED_ASSESSMENT_HOURS}{" "}
             assessment hours per patient, and the scheduled interviews take
-            2.3–4.3, which leaves{" "}
-            {currentResp.budgetMargin[0].toFixed(1)}–
+            2.3–4.3, which leaves {currentResp.budgetMargin[0].toFixed(1)}–
             {currentResp.budgetMargin[1].toFixed(1)} hours per app user.{" "}
             {currentResp.budgetFit === "fits"
               ? "If that margin was meant for these interviews, the design fits within it."
@@ -1919,9 +1946,9 @@ export default function PowerCurves() {
               plus 25 for each extra rater scoring the recording, and 45 minutes
               of the participant&apos;s, at ${RATER_RATE.toFixed(2)} and $
               {PATIENT_RATE.toFixed(2)} an hour ({BUDGET_SOURCE}). Sites can be
-              scaled by per-site cost factors. How soon to hold a triggered interview, and
-              how many slots to reserve, are in the simulation (simulations/ in
-              this repository).
+              scaled by per-site cost factors. How soon to hold a triggered
+              interview, and how many slots to reserve, are in the simulation
+              (simulations/ in this repository).
             </p>
           </details>
         </section>
@@ -2591,10 +2618,10 @@ export default function PowerCurves() {
                 ? `Precision: half-width of the ${ciLevel}% CI on the effect estimate`
                 : `Minimum detectable effect at ${(power * 100).toFixed(0)}% power`}
             </p>
-            {(useRasch || useMFRM) && (
+            {varianceChangeLabel(currentHamd.varianceReduction) && (
               <p className="text-xs text-green-700 mb-2">
-                Measurement optimization: -
-                {currentHamd.varianceReduction?.toFixed(1)}% variance
+                Measurement optimization:{" "}
+                {varianceChangeLabel(currentHamd.varianceReduction)} variance
               </p>
             )}
             <div

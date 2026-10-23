@@ -106,7 +106,7 @@ survival_efficiency <- ${s.survivalEfficiency}
 # Measurement model
 measurement_model     <- "${s.measurementModel}"
 sum_score_reliability <- ${s.sumScoreReliability}
-rasch_reliability     <- ${s.raschReliability}
+rasch_reliability_gain <- ${s.raschReliabilityGain}
 rater_variance_prop   <- ${s.raterVarianceProp}
 
 # ICC substudy parameters
@@ -373,7 +373,7 @@ use_mfrm  <- measurement_model == "mfrm"
 meas_mult <- 1
 if (use_rasch) {
   sum_err  <- 1 - sum_score_reliability
-  rasch_err <- 1 - rasch_reliability
+  rasch_err <- 1 - min(sum_score_reliability + rasch_reliability_gain, 0.999)
   meas_mult <- meas_mult * (1 - ((sum_err - rasch_err) / sum_err) * sum_err)
 }
 if (use_mfrm) meas_mult <- meas_mult * (1 - rater_variance_prop)
