@@ -222,8 +222,8 @@ function loadSettings() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      // Spreading over defaults means a payload saved before the three-arm keys
-      // existed picks them up automatically, and defaults to the two-arm design.
+      // Spreading over defaults means a payload saved before a setting existed picks
+      // it up from the current defaults.
       return { ...defaults, ...JSON.parse(saved) };
     }
   } catch (e) {

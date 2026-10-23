@@ -8,17 +8,21 @@ export const defaults = {
   analysisFraming: "exploratory",
   chartMetric: "precision", // "precision" | "mde" - what the outcome charts plot
 
-  // Design
-  designArms: 2,
+  // Design: the approved trial. Three arms (clinician + patient, patient-only, control)
+  // at 4:3:3 (memo option B.3, 40/30/30), with hybrid randomization. The committee
+  // approved three arms and hybrid randomization on 2026-08-20; the switch from B2
+  // (50/25/25) to 4:3:3 followed by email on 2026-08-22 and is the allocation in the
+  // October protocol and consent forms.
+  designArms: 3,
   // "hybrid" randomizes clinicians to ROM vs no-ROM, then randomizes patients WITHIN
   // no-ROM clinicians to app-only vs TAU. That makes app-only vs TAU a within-clinician
   // comparison, which removes the between-clinician variance from that contrast. Only
   // meaningful for the three-arm design; ignored when designArms is 2.
   randomization: "hybrid",
   treatmentRatio: 3,
-  allocA: 1,
-  allocB: 1,
-  allocC: 1,
+  allocA: 4,
+  allocB: 3,
+  allocC: 3,
   multiplicity: "dunnett",
   // On by default: t with df = clusters - arms is the standard reference distribution for
   // cluster-level inference in a CRT (Hayes & Moulton), and it costs only ~1% on the MDE

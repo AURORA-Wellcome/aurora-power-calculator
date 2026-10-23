@@ -817,9 +817,12 @@ section("7. Shipped defaults");
 
 {
   ok(
-    "default design is 2-arm",
-    defaults.designArms === 2,
-    String(defaults.designArms),
+    "default design is the approved 3-arm trial at 4:3:3",
+    defaults.designArms === 3 &&
+      defaults.allocA === 4 &&
+      defaults.allocB === 3 &&
+      defaults.allocC === 3,
+    `${defaults.designArms} arms, ${defaults.allocA}:${defaults.allocB}:${defaults.allocC}`,
   );
   ok(
     "default cluster size CV is 0.2 (low)",
@@ -848,18 +851,20 @@ section("7. Shipped defaults");
     defaults.chartMetric,
   );
 
-  const dm = createModel(defaults);
+  // The two-arm design at the shipped settings, kept as the comparison the third arm is
+  // measured against.
+  const dm = createModel({ ...defaults, designArms: 2 });
   const n = defaults.nClinicians * defaults.patientsPerCluster;
   const h = dm.hamd(n, dm.contrasts[0]);
-  close("default 2-arm HAM-D MDE at N=1000", h.mde, 1.446, 0.02);
+  close("2-arm HAM-D MDE at N=1000", h.mde, 1.446, 0.02);
   close(
-    "default 2-arm HAM-D CI half-width at N=1000",
+    "2-arm HAM-D CI half-width at N=1000",
     h.ciHalfWidth,
     1.016,
     0.02,
   );
 
-  const d3 = createModel({ ...defaults, designArms: 3 });
+  const d3 = createModel(defaults);
   const AC = d3.contrasts.find((c) => c.id === "AC");
   const h3 = d3.hamd(n, AC);
   ok(
@@ -911,18 +916,31 @@ section("7. Shipped defaults");
     defaults.randomization === "hybrid",
     defaults.randomization,
   );
-  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.45, 0.02);
+  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.423, 0.02);
   close(
     "default 3-arm A-C CI half-width at N=1000",
     h3.ciHalfWidth,
-    1.018,
+    0.999,
     0.02,
   );
+  // Under hybrid randomization the control patients are spread across the 60% of
+  // clinicians without ROM, so the primary contrast's clustering cost falls; at 4:3:3 it
+  // is slightly more precise than the two-arm 3:1 design. Under cluster randomization
+  // the third arm still costs precision.
   ok(
-    "3-arm still costs more than 2-arm under the shipped defaults",
-    h3.mde > h.mde,
-    `${h3.mde.toFixed(3)} vs ${h.mde.toFixed(3)} (+${((h3.mde / h.mde - 1) * 100).toFixed(1)}%)`,
+    "at 4:3:3 with hybrid randomization the primary contrast beats the 2-arm design",
+    h3.mde < h.mde,
+    `${h3.mde.toFixed(3)} vs ${h.mde.toFixed(3)} (${((h3.mde / h.mde - 1) * 100).toFixed(1)}%)`,
   );
+  {
+    const c3 = createModel({ ...defaults, randomization: "cluster" });
+    const hc = c3.hamd(n, c3.contrasts.find((c) => c.id === "AC"));
+    ok(
+      "under cluster randomization the third arm still costs precision",
+      hc.mde > h.mde,
+      `${hc.mde.toFixed(3)} vs ${h.mde.toFixed(3)}`,
+    );
+  }
   // The responsiveness defaults are the design proposed for the 29 October 2026
   // decision, so a change to them is a change to that proposal.
   ok(
@@ -948,7 +966,8 @@ section("7g. ICC substudy confidence level");
 // which is not the same thing as always being 95%.
 
 {
-  const base = { ...defaults, siteRoster: DEFAULT_ROSTER };
+  // Two arms, so the t df below is clinicians - 2.
+  const base = { ...defaults, designArms: 2, siteRoster: DEFAULT_ROSTER };
   const N = defaults.nClinicians * defaults.patientsPerCluster;
 
   // The label and the number come from one value, so they cannot drift apart.
@@ -1024,9 +1043,13 @@ section("7b. Hybrid cluster-individual randomization");
 {
   // Single site throughout: this section compares randomization SCHEMES against each
   // other, and site stratification would perturb both in ways unrelated to the claim.
+  // Equal thirds: the apportionment arithmetic below (33/67, N = 990) assumes them.
   const base = {
     ...defaults,
     designArms: 3,
+    allocA: 1,
+    allocB: 1,
+    allocC: 1,
     analysisFraming: "confirmatory",
     multiplicity: "none",
     siteRoster: ONE_SITE,
@@ -1986,6 +2009,7 @@ section("8. Fairness / DIF substudy");
   // legitimately changes the effective cluster size. Hybrid is covered separately below.
   const conf = {
     ...defaults,
+    designArms: 2,
     analysisFraming: "confirmatory",
     randomization: "cluster",
   };
