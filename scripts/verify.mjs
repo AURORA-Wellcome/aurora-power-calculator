@@ -851,11 +851,11 @@ section("7. Shipped defaults");
   const dm = createModel(defaults);
   const n = defaults.nClinicians * defaults.patientsPerCluster;
   const h = dm.hamd(n, dm.contrasts[0]);
-  close("default 2-arm HAM-D MDE at N=1000", h.mde, 1.39, 0.02);
+  close("default 2-arm HAM-D MDE at N=1000", h.mde, 1.446, 0.02);
   close(
     "default 2-arm HAM-D CI half-width at N=1000",
     h.ciHalfWidth,
-    0.976,
+    1.016,
     0.02,
   );
 
@@ -868,20 +868,20 @@ section("7. Shipped defaults");
     defaults.measurementModel,
   );
   {
-    // The MFRM gain is an assumption, so pin its size: ~11.7% off the error variance,
-    // ~6% off the MDE against a sum score. If either drifts, that is a real change to
-    // what the grant is claiming.
+    // The MFRM gain is an assumption, so pin its size: 7% off the error variance (rater
+    // severity only, no Rasch reliability gain), ~3.6% off the MDE against a sum score.
+    // If either drifts, that is a real change to what the trial is claiming.
     const dm = createModel(defaults);
     const sum = createModel({ ...defaults, measurementModel: "sum" });
     const c = dm.contrasts[0];
     close(
       "MFRM variance multiplier",
       dm.measurementVarianceMultiplier,
-      0.8835,
+      0.93,
       1e-9,
     );
     const gain = 1 - dm.hamd(1000, c).mde / sum.hamd(1000, c).mde;
-    close("MFRM improves the MDE ~6% vs sum score", gain, 0.06, 0.005);
+    close("MFRM improves the MDE ~3.6% vs sum score", gain, 0.036, 0.005);
     ok(
       "sum-score baseline is still reported for comparison",
       dm.hamd(1000, c).baselineMDE > dm.hamd(1000, c).mde,
@@ -893,11 +893,11 @@ section("7. Shipped defaults");
     defaults.randomization === "hybrid",
     defaults.randomization,
   );
-  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.405, 0.02);
+  close("default 3-arm A-C HAM-D MDE at N=1000", h3.mde, 1.45, 0.02);
   close(
     "default 3-arm A-C CI half-width at N=1000",
     h3.ciHalfWidth,
-    0.986,
+    1.018,
     0.02,
   );
   ok(
