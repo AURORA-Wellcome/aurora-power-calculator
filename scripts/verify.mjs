@@ -2369,6 +2369,12 @@ section("8b. Responsiveness interviews (Aim 2.2)");
       1e-9,
     );
     close(
+      "two raters: plus one scorer per interview",
+      r({ respScoring: "double" }).costPerInterview,
+      perInterview(2),
+      1e-9,
+    );
+    close(
       "three raters: plus two scorers per interview",
       x.costPerInterview,
       perInterview(3),
@@ -2444,6 +2450,42 @@ section("8b. Responsiveness interviews (Aim 2.2)");
     r().missHalfWidth < r({ respScoring: "single" }).missHalfWidth,
   );
   {
+    // Two raters sit between one and three on cost and on the miss-rate interval.
+    const [one, two, three] = ["single", "double", "consensus"].map((sc) =>
+      r({ respScoring: sc }),
+    );
+    ok(
+      "two raters cost between one and three",
+      one.totalCost < two.totalCost && two.totalCost < three.totalCost,
+    );
+    ok(
+      "two raters' miss-rate interval is between one and three",
+      three.missHalfWidth < two.missHalfWidth &&
+        two.missHalfWidth < one.missHalfWidth,
+      [one, two, three].map((y) => y.missHalfWidth.toFixed(4)).join(" > "),
+    );
+    // Every preset's as-scored miss rate falls as scoring improves.
+    ok(
+      "as-scored miss rate falls from one to two to three raters at every threshold",
+      TRIGGER_THRESHOLDS.every((t) =>
+        HAMD_MODELS.every((m) => {
+          const o = INTERVIEW_PRESETS[t][m].missObserved;
+          return o.single > o.double && o.double > o.consensus;
+        }),
+      ),
+    );
+    // The two-rater SEM follows from the other two: shared error variance s and
+    // independent i, with s + i = 2.5^2 and s + i/3 = 1.5^2.
+    const i = ((SCORING.single.sem ** 2 - SCORING.consensus.sem ** 2) * 3) / 2;
+    const sh = SCORING.single.sem ** 2 - i;
+    close(
+      "two-rater SEM follows from the one- and three-rater SEMs",
+      SCORING.double.sem,
+      Math.sqrt(sh + i / 2),
+      0.05,
+    );
+  }
+  {
     const none = r({ respAudits: 0 });
     ok(
       "no audits leaves the miss rate unestimated but PPV intact",
@@ -2468,7 +2510,7 @@ section("8b. Responsiveness interviews (Aim 2.2)");
         : y.raterHoursPerUser <= y.budgetMargin[1]
           ? "tight"
           : "exceeds";
-    for (const sc of ["consensus", "single"]) {
+    for (const sc of ["consensus", "double", "single"]) {
       const y = r({ respScoring: sc });
       ok(
         `budget verdict matches the margins (${sc})`,

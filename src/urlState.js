@@ -90,7 +90,8 @@ export const SETTING_SPEC = {
   // simulation presets cover, so an edited link cannot ask for one that has no preset.
   respAudits: { type: "int", min: 0, max: 6 },
   respTrigger: { type: "enum", values: TRIGGER_THRESHOLDS },
-  respScoring: { type: "enum", values: ["single", "consensus"] },
+  // Enum values are encoded by index, so new options go on the end.
+  respScoring: { type: "enum", values: ["single", "consensus", "double"] },
   respCompletion: { type: "number", min: 0.3, max: 1 },
   respEnrollWeeks: { type: "int", min: 8, max: 80 },
 };

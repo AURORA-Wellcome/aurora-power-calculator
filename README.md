@@ -280,8 +280,11 @@ Statistical notes:
   panels.
 - **Rater error is the binding problem.** It inflates the observed miss rate several-fold:
   at a 5-point change it is 0.02–0.07 in truth but 0.22–0.26 with one rater. PPV, as
-  defined, barely moves. The panel shows true and as-scored values for both HAM-D models,
-  so the scoring choice is visible alongside the precision it buys.
+  defined, barely moves. Each interview can be scored by one rater (SEM 2.5), two (1.8)
+  or three (1.5), averaging the interviewer with raters scoring the recording. The two-
+  rater SEM follows from the other two: they imply error variance of about 0.25 that all
+  raters share plus 6.0 that averages out. The panel shows true and as-scored values for
+  both HAM-D models, so the scoring choice is visible alongside the precision it buys.
 - **Load and cost.** Peak weekly load assumes even enrollment over `respEnrollWeeks`, or
   16 weeks if enrollment is faster. Each interview takes 40 minutes of rater time, plus 25
   for each extra rater scoring the recording, and 45 minutes of the participant's. Hourly
@@ -320,7 +323,7 @@ cd simulations
 python aurora_random_hamd_audit_sim.py --reps 200        # random audits by number and design
 python aurora_responsiveness_interview_sim.py --reps 200 # triggered interviews, timing, slots, cost
 python aurora_responsiveness_interview_sim.py --reps 200 --recall 7   # HAM-D reflects the past week
-python aurora_responsiveness_interview_sim.py --presets --reps 200    # the calculator's presets
+python aurora_responsiveness_interview_sim.py --presets --reps 200 --rater-sem 2.5 1.8 1.5  # the calculator's presets
 ```
 
 The cost tables read the same budget module as the app (through Node), so on a study-team

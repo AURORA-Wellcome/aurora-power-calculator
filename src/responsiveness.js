@@ -9,9 +9,11 @@
 // not yet calibrated to pilot data. Treat them as presets: regenerate them when AURORA's
 // real trigger rule and pilot data arrive, rather than tuning them here.
 //
-//   cd simulations && python aurora_responsiveness_interview_sim.py --presets --reps 200
+//   cd simulations && python aurora_responsiveness_interview_sim.py --presets --reps 200 \
+//     --rater-sem 2.5 1.8 1.5
 //
-// Output kept in simulations/aurora_responsiveness_presets_2026-10-22.json.
+// Output kept in simulations/aurora_responsiveness_presets_2026-10-26.json, where the
+// keys 2.5, 1.8 and 1.5 are the single, double and consensus columns below.
 
 export const INTERVIEW_PRESETS_SOURCE =
   "simulations/aurora_responsiveness_interview_sim.py --presets (700 app users, 200 trials, seed 20261022, interview the day after the trigger)";
@@ -34,15 +36,15 @@ export const INTERVIEW_PRESETS = {
     negativeShare: 0.741,
     sameDay: {
       missTrue: 0.242,
-      missObserved: { single: 0.493, consensus: 0.366 },
+      missObserved: { single: 0.493, double: 0.407, consensus: 0.366 },
       ppvTrue: 0.389,
-      ppvObserved: { single: 0.438, consensus: 0.416 },
+      ppvObserved: { single: 0.438, double: 0.424, consensus: 0.416 },
     },
     pastWeek: {
       missTrue: 0.103,
-      missObserved: { single: 0.45, consensus: 0.282 },
+      missObserved: { single: 0.45, double: 0.336, consensus: 0.282 },
       ppvTrue: 0.272,
-      ppvObserved: { single: 0.398, consensus: 0.354 },
+      ppvObserved: { single: 0.398, double: 0.37, consensus: 0.354 },
     },
   },
   4: {
@@ -51,15 +53,15 @@ export const INTERVIEW_PRESETS = {
     negativeShare: 0.854,
     sameDay: {
       missTrue: 0.134,
-      missObserved: { single: 0.369, consensus: 0.242 },
+      missObserved: { single: 0.369, double: 0.28, consensus: 0.242 },
       ppvTrue: 0.475,
-      ppvObserved: { single: 0.488, consensus: 0.483 },
+      ppvObserved: { single: 0.488, double: 0.485, consensus: 0.483 },
     },
     pastWeek: {
       missTrue: 0.046,
-      missObserved: { single: 0.322, consensus: 0.166 },
+      missObserved: { single: 0.322, double: 0.212, consensus: 0.166 },
       ppvTrue: 0.388,
-      ppvObserved: { single: 0.455, consensus: 0.433 },
+      ppvObserved: { single: 0.455, double: 0.442, consensus: 0.433 },
     },
   },
   5: {
@@ -68,15 +70,15 @@ export const INTERVIEW_PRESETS = {
     negativeShare: 0.92,
     sameDay: {
       missTrue: 0.07,
-      missObserved: { single: 0.264, consensus: 0.149 },
+      missObserved: { single: 0.264, double: 0.181, consensus: 0.149 },
       ppvTrue: 0.564,
-      ppvObserved: { single: 0.541, consensus: 0.551 },
+      ppvObserved: { single: 0.541, double: 0.547, consensus: 0.551 },
     },
     pastWeek: {
       missTrue: 0.022,
-      missObserved: { single: 0.222, consensus: 0.091 },
+      missObserved: { single: 0.222, double: 0.127, consensus: 0.091 },
       ppvTrue: 0.508,
-      ppvObserved: { single: 0.509, consensus: 0.51 },
+      ppvObserved: { single: 0.509, double: 0.51, consensus: 0.51 },
     },
   },
   7: {
@@ -85,15 +87,15 @@ export const INTERVIEW_PRESETS = {
     negativeShare: 0.978,
     sameDay: {
       missTrue: 0.017,
-      missObserved: { single: 0.123, consensus: 0.05 },
+      missObserved: { single: 0.123, double: 0.068, consensus: 0.05 },
       ppvTrue: 0.735,
-      ppvObserved: { single: 0.646, consensus: 0.688 },
+      ppvObserved: { single: 0.646, double: 0.676, consensus: 0.688 },
     },
     pastWeek: {
       missTrue: 0.004,
-      missObserved: { single: 0.092, consensus: 0.024 },
+      missObserved: { single: 0.092, double: 0.039, consensus: 0.024 },
       ppvTrue: 0.719,
-      ppvObserved: { single: 0.619, consensus: 0.662 },
+      ppvObserved: { single: 0.619, double: 0.648, consensus: 0.662 },
     },
   },
 };
@@ -102,10 +104,14 @@ export const TRIGGER_THRESHOLDS = [3, 4, 5, 7];
 export const HAMD_MODELS = ["sameDay", "pastWeek"];
 
 // How each extra interview is scored: by the interviewing rater alone (SEM 2.5 HAM-D
-// points, inter-rater ICC about 0.85), or by three raters scoring the recording (SEM 1.5).
-// These are the simulation's two cases; the SEM itself is not an input here.
+// points, inter-rater ICC about 0.85), or by the interviewer plus one or two raters
+// scoring the recording, averaged. One and three raters' SEMs (2.5, 1.5) imply error
+// variance of about 0.25 shared by all raters plus 6.0 that averages out, so two raters
+// give sqrt(0.25 + 6/2) = 1.8. These are the simulation's three cases; the SEM itself is
+// not an input here.
 export const SCORING = {
   single: { raters: 1, sem: 2.5, label: "One rater" },
+  double: { raters: 2, sem: 1.8, label: "Two raters" },
   consensus: { raters: 3, sem: 1.5, label: "Three raters" },
 };
 

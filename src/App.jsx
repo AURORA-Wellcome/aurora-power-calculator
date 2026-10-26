@@ -1715,6 +1715,7 @@ export default function PowerCurves() {
                 className={selectCls}
               >
                 <option value="single">One rater (SEM 2.5)</option>
+                <option value="double">Two raters (SEM 1.8)</option>
                 <option value="consensus">Three raters (SEM 1.5)</option>
               </select>
             </div>
